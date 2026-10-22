@@ -1,0 +1,1314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>The Doll Man (player)</title>
+<link rel="icon" href="data:,">
+<!-- This page is what X loads inside the post. Keep it out of Google: -->
+<meta name="robots" content="noindex">
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#140c14;
+            touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  canvas{display:block;width:100%;height:100%;outline:none;image-rendering:pixelated}
+  #loading{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+           background:#140c14;color:#d4909c;font:bold 18px monospace;z-index:9;text-align:center}
+  #loading .dot{width:12px;height:12px;margin-top:12px;background:#c03040;animation:b .5s infinite alternate}
+  @keyframes b{to{transform:translateY(-12px)}}
+  #loading.off{display:none}
+  /* BUTTONS: top corners (X can cover the bottom 30% on phones), at least 44x44 px */
+  .ctl{position:fixed;top:2px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+       border:0;border-radius:10px;background:rgba(20,12,20,.55);color:#fff;font:20px system-ui,sans-serif;
+       text-decoration:none;cursor:pointer;padding:0;z-index:5;-webkit-tap-highlight-color:transparent}
+  #mute{right:2px}
+  #open{left:2px;display:none}
+  html.framed #open{display:flex}
+  html.card #open,html.card #mute{display:none}
+</style>
+</head>
+<body>
+<div id="loading">The Doll Man<div class="dot"></div></div>
+<canvas id="c" tabindex="0" aria-label="The Doll Man, a point-and-click horror adventure. Tap things to look and use them. Long-press for look, use or talk."></canvas>
+<button id="mute" class="ctl" data-control aria-label="Sound" aria-pressed="false">🔊</button>
+<a id="open" class="ctl" data-control href="game.html?v=1" aria-label="Open the game in a new tab">↗</a>
+<script>
+"use strict";
+// =====================================================================
+// THE DOLL MAN - Splazetown's first point-and-click horror adventure. Plain JavaScript + canvas, no libraries.
+// The story is data (tools/story.js) and the rules are a pure reducer (tools/rules.js); both are inlined here by
+// tools/build.py, and the SAME files run in the robot solver (test/solver.js).
+// =====================================================================
+const ART = {"pal":{"k":"#140c14","d":"#2b1d2a","p":"#48304a","m":"#6e4a62","r":"#a05a6c","P":"#d4909c","L":"#f2c8c8","w":"#f7ecdc","g":"#cbb89c","b":"#8a6448","B":"#563a2a","y":"#f0cc74","Y":"#b0863c","R":"#c03040","s":"#9aa4b4","S":"#4a5468","G":"#6e8c6a","c":"#a8d0dc","e":"#3a6a92","W":"#ffffff","h":"#6a4026","o":"#f08848","n":"#24303e","v":"#7a6a9a","q":"#3a2c3c","t":"#e6dccb"},"spr":{"key":["............","............","..YYY.......",".YyyyY......",".Yy.yYYYYYY.",".YyyyY.Y.Y..","..YYY..Y.Y..","............","............","............","............","............"],"clef":["....YYY.....","...Y...Y....","...Y.Y.Y....","....YY.Y....","...Y..Y.....","..Y..YY.....","..Y.Y.Y.....","...YYYY.....","......Y.....","......YYYY..","......Y.Y...","......Y....."],"box":[".....y......","....yPy.....",".....P......","....PPP.....",".....w......","..bbbbbbbb..",".bByyyyyyBb.",".bBbbbbbbBbk",".bBbbPbbbBb.",".bBbbbbbbBb.",".BBBBBBBBBB.","............"],"wbox":["c....y....c.",".c..yPy..c..",".....P......","c...PPP...c.",".....w......","..bbbbbbbb..",".bByyyyyyBb.",".bBbbbbbbBbY",".bBbbPbbbBbY",".bBbbbbbbBb.",".BBBBBBBBBB.","............"],"ladle":["..........s.",".........ss.","........ss..",".......ss...","......ss....",".....ss.....","....ss......","..sss.......",".sSSSs......",".sSSSs......","..sss.......","............"],"windkey":["............","..YY....YY..",".YyyY..YyyY.",".YyyyYYyyyY.",".YyyY..YyyY.","..YY.YY.YY..",".....YY.....",".....YY.....",".....YY.....","....YYYY....","....Y..Y....","............"],"cellarkey":["............","..SSS.......",".SsssS......",".Ss.sSSSSSS.",".SsssS..S.S.","..SSS...S.S.","............","............","............","............","............","............"],"scissors":["..s......s..","..ss....ss..","...ss..ss...","....ssss....",".....ss.....","....kssk....","...RR..RR...","..R..RR..R..","..R..RR..R..","...RR..RR...","............","............"],"needle":["..........k.",".........s.s","........s.s.",".......s.s..","......ss....",".....ss.....","....ss......","...ss.......","..ss........",".ss.........",".s..........","............"],"thread":["............","..bbbbbbbb..","...RRRRRR...","...RrRRrR...","...RRRRRR...","...RRrRRR...","...RRRRRR...","..bbbbbbbb..","..........R.","...........R","..........R.","............"],"tneedle":["..........k.",".........sRs","........s.sR",".......s.s.R","......ss...R",".....ss....R","....ss....R.","...ss....R..","..ss....R...",".ss...RR....",".s.RRR......","............"],"ribbon":["............","PPPPPPPPPP..","PwPwPPwPwPP.","PPPPPPPPPPP.",".........PP.",".........PP.","........P..P","........P..P","............","............","............","............"],"i_hint":[".....o......","....oyo.....","....oyo.....",".....y......","....wwg.....","....wwg.....","....wwg.....","....wwg.....","....wwg.....","...BBBBB....","..BbbbbbB...","............"],"i_journal":["............",".BBBBBBBBB..",".BrrrrrrrB..",".BryyyyyrB..",".BrrrrrrrB..",".BrryyyrrB..",".BrrrrrrrB..",".BrrrrrrrB..",".BBBBBBBBBw.","..wwwwwwwww.","............","............"],"i_eye":["............","............","....kkkk....","..kkwwwwkk..",".kwwweewwwk.","kwwwekkewwwk",".kwwweewwwk.","..kkwwwwkk..","....kkkk....","............","............","............"],"i_bag":["....bbbb....","...b....b...","...b....b...",".BBBBBBBBBB.",".BbbbbbbbbB.",".BbbbyybbbB.",".BbbbbbbbbB.",".BbbbbbbbbB.",".BBBBBBBBBB.","............","............","............"],"i_hand":["....w.w.....","...wtwtww...","...wtwtwtw..","...wtwtwtw..","...wwwwwtw..",".ww.wwwwww..",".twwwwwwww..","..twwwwwww..","...twwwwt...","....twwt....","............","............"],"i_mouth":["............","............","....rrrr....","..rrRRRRrr..",".rRRRRRRRRr.",".rRwwwwwwRr.","..rRRRRRRr..","....rrrr....","............","............","............","............"],"i_house":[".....R......","....RRR.....","...RRRRR....","..RRRRRRR...",".RRRRRRRRR..","..wwwwwww...","..wyywkkw...","..wyywkkw...","..wwwwkkw...","..wwwwkkw...","............","............"],"i_skull":["...hhhhh....","..hwwwwwh...",".hwwwwwwwh..",".hwkwwwkwh..",".hwPwwwPwh..","..wwwRwww...","...wwwww....","....PPP.....","...PPPPP....","............","............","............"],"ROSE":["..rRRr...",".rRrRRr..",".RrRrRR..",".rRRRRr..","..rRRr...","....G....","..GGG....","....G.G..","....GG..."],"BELL":["....Y....","...yyy...","..yyyyy..","..yyyyy..","..yyyyy..",".yyyyyyy.","YYYYYYYYY","....Y....","........."],"MOON":["..wwww...",".www.....","www......","ww.......","ww.......","www......",".www.....","..wwww...","........."],"STAR":["....y....","....y....","...yyy...","yyyyyyyyy",".yyyyyyy.","..yyyyy..","..yy.yy..",".yy...yy.","y.......y"],"HEART":[".RR...RR.","RRRR.RRRR","RRRRRRRRR","RRRRRRRRR",".RRRRRRR.","..RRRRR..","...RRR...","....R....","........."],"doll":["....HHHHHH....","...HHHHHHHH...","..HHHHHHHHHH..","..HHwwwwwwHH..","..HwwwwwwwwH..","..HwEEwwEEwH..","..HwEkwwEkwH..","..HwwwwwwwwH..","..HPwwRRwwPH..","..HHwwwwwwHH..","....wwwwww....","...AAAAAAAA...","..DDAAAAAADD..","..DDDDDDDDDD..",".wDDDDDDDDDDw.",".wDDDDDDDDDDw.","..DDDDDDDDDD..",".DDDDDDDDDDDD.",".DDDDDDDDDDDD.","DDDDDDDDDDDDDD","...ww....ww...","...kk....kk..."]}};
+const FONT = {"A":".###./#...#/#...#/#####/#...#/#...#/#...#","B":"####./#...#/#...#/####./#...#/#...#/####.","C":".###./#...#/#..../#..../#..../#...#/.###.","D":"####./#...#/#...#/#...#/#...#/#...#/####.","E":"#####/#..../#..../####./#..../#..../#####","F":"#####/#..../#..../####./#..../#..../#....","G":".###./#...#/#..../#.###/#...#/#...#/.####","H":"#...#/#...#/#...#/#####/#...#/#...#/#...#","I":"###/.#./.#./.#./.#./.#./###","J":"..###/...#./...#./...#./#..#./#..#./.##..","K":"#...#/#..#./#.#../##.../#.#../#..#./#...#","L":"#..../#..../#..../#..../#..../#..../#####","M":"#...#/##.##/#.#.#/#.#.#/#...#/#...#/#...#","N":"#...#/##..#/#.#.#/#..##/#...#/#...#/#...#","O":".###./#...#/#...#/#...#/#...#/#...#/.###.","P":"####./#...#/#...#/####./#..../#..../#....","Q":".###./#...#/#...#/#...#/#.#.#/#..#./.##.#","R":"####./#...#/#...#/####./#.#../#..#./#...#","S":".####/#..../#..../.###./....#/....#/####.","T":"#####/..#../..#../..#../..#../..#../..#..","U":"#...#/#...#/#...#/#...#/#...#/#...#/.###.","V":"#...#/#...#/#...#/#...#/#...#/.#.#./..#..","W":"#...#/#...#/#...#/#.#.#/#.#.#/#.#.#/.#.#.","X":"#...#/#...#/.#.#./..#../.#.#./#...#/#...#","Y":"#...#/#...#/.#.#./..#../..#../..#../..#..","Z":"#####/....#/...#./..#../.#.../#..../#####","0":".###./#...#/#..##/#.#.#/##..#/#...#/.###.","1":".#./##./.#./.#./.#./.#./###","2":".###./#...#/....#/...#./..#../.#.../#####","3":"####./....#/....#/.###./....#/....#/####.","4":"...#./..##./.#.#./#..#./#####/...#./...#.","5":"#####/#..../####./....#/....#/#...#/.###.","6":".###./#..../#..../####./#...#/#...#/.###.","7":"#####/....#/...#./..#../.#.../.#.../.#...","8":".###./#...#/#...#/.###./#...#/#...#/.###.","9":".###./#...#/#...#/.####/....#/....#/.###.",".":"./././././.#",",":"../../../../../.#/#.","!":"#/#/#/#/#/./#","?":".###./#...#/....#/...#./..#../...../..#..",":":"./././#/./#/.","-":".../.../.../###/.../.../...","+":"...../..#../..#../#####/..#../..#../.....","/":"....#/...#./...#./..#../.#.../.#.../#....","%":"##..#/##..#/...#./..#../.#.../#..##/#..##","'":"#/#/./././././","&":".##../#..#./#.#../.#.../#.#.#/#..#./.##.#","(":".#/#./#./#./#./#./.#",")":"#./.#/.#/.#/.#/.#/#.",">":"#.../.#../..#./...#/..#./.#../#...","<":"...#/..#./.#../#.../.#../..#./...#","=":"..../..../####/..../####/..../....","x":"...../...../#...#/.#.#./..#../.#.#./#...#"};
+// THE DOLL MAN - the whole adventure as data. Original story, text and puzzles by GameDevBot for Splazetown.
+// Rooms are 160x100 "scene pixels". Hotspots: {id,name,x,y,w,h, show (condition), quiet (condition: nothing new here),
+//   tap ('look' | 'use' | 'look1' = look the first time, then use), look/use/talk: action or [alternatives with `if`],
+//   on: {itemId: action, '*': fallback}, code: {value: action}}.
+// Action fields: if, say, set, unset, give, take, go, die, win, clue, fx, sfx. Conditions: "flag & !flag | has:item | seen:room".
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory();
+  else root.STORY = factory();
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+  const SYM = ["ROSE", "BELL", "MOON", "STAR", "HEART"], codeValues = [];
+  for (const a of SYM) for (const b of SYM) for (const c of SYM) codeValues.push(a + "-" + b + "-" + c);
+  const door = (id, name, x, y, w, h, to, look) => ({ id, name, x, y, w, h, tap: "use", look: { say: look }, use: { go: to } });
+  return {
+    title: "THE DOLL MAN",
+    start: "nursery",
+    symbols: SYM, codeValues, code: "ROSE-BELL-MOON",
+    intro: "You wake up on a velvet rug in a pink nursery. Your arms feel stiff. You're wearing a frilly dress, which is odd, because you went to bed in pyjamas. Somewhere inside the walls, a music box plays three notes and stops.",
+    timer: { at: [18, 40, 70, 105], stop: "free", lines: [
+      "You notice a neat row of red stitches on the back of your hand. You don't remember getting them.",
+      "The stitches have crept up past your wrist. Your fingers feel a little stiff. A little stuffed.",
+      "The stitches reach your elbow now. Your arm creaks when you bend it, like a doll's joint.",
+      "The stitches have reached your shoulder. Honestly? They're kind of pretty. Wait, no. Hurry." ] },
+    lines: {
+      noUse: ["Nothing happens. You feel watched while it doesn't.", "You fiddle with it. It does not fiddle back. Good.", "That does nothing useful, but thank you for trying."],
+      noTalk: ["It doesn't answer. Be glad.", "You chat to it. The house listens in.", "Silence. Somewhere a doll giggles anyway."],
+      noItem: ["That doesn't work here.", "No. Think about what that's for.", "You try. The house seems amused."],
+      noCombine: ["Those two don't go together.", "You jiggle them together. Nothing.", "No luck. Not every pair is a match."],
+    },
+    items: {
+      key:       { name: "Brass key",      look: "A small brass key, still warm from the doll's hands." },
+      clef:      { name: "Clef key",       look: "A brass key with a curly treble-clef head." },
+      box:       { name: "Music box",      look: "Wren's music box. A tiny dancer on top, a little keyhole in the side, and no winding key." },
+      ladle:     { name: "Ladle",          look: "A long iron ladle. Good for reaching the bottom of things." },
+      windkey:   { name: "Winding key",    look: "A tiny brass winding key, sticky with pink soup." },
+      wbox:      { name: "Wound music box", look: "Wren's music box, wound and ready. Its lullaby makes something in this house stand very still." },
+      cellarkey: { name: "Iron key",       look: "A heavy iron key from the music box drawer. It smells of cold stone." },
+      scissors:  { name: "Scissors",       look: "Sharp sewing scissors. The recipe said the guest must never find these. Found them." },
+      needle:    { name: "Needle",         look: "A long silver needle with a big eye. It needs thread." },
+      thread:    { name: "Red thread",     look: "A spool of bright red thread." },
+      tneedle:   { name: "Threaded needle", look: "A needle threaded with red. Ready to stitch something." },
+      ribbon:    { name: "Name ribbon",    look: "A satin ribbon embroidered AMBROSE FENNICK, TOYMAKER. The Doll Man's true name." },
+    },
+    combos: [
+      { a: "box", b: "windkey", do: { take: "box windkey", give: "wbox cellarkey", set: "boxWound", clue: "lullaby", sfx: "lullaby",
+        say: "You fit the winding key and turn it. The dancer twirls and a thin, sweet lullaby plays. A tiny drawer pops open in the base. Inside is an iron key. Far below the house, something heavy stops moving, to listen." } },
+      { a: "needle", b: "thread", do: { take: "needle thread", give: "tneedle", say: "You thread the needle with red thread on the first try. Your fingers are steadier than your nerves." } },
+      { a: "ribbon", b: "tneedle", do: { say: "A name like that belongs stitched onto something. Not here. Not yet." } },
+      { a: "scissors", b: "thread", do: { say: "You could cut the thread, but you might need it in one piece." } },
+    ],
+    deaths: {
+      bed:    { name: "Sweet Dreams", room: "nursery", say: "You lie down, just for a moment. The sheets tuck themselves in around you, tighter and tighter, and the canopy stitches itself shut over your head. Goodnight, little doll." },
+      clock:  { name: "Thirteen O'Clock", room: "hall", say: "You wind the clock. It strikes thirteen. On the last bong the clock door swings open, and two long porcelain arms pull you inside to keep perfect time forever." },
+      tea:    { name: "Guest of Honour", room: "parlor", say: "You sit. The tea is lovely. Your fingers stiffen around the cup, your smile sets like glaze, and the other guests clink their cups in welcome. A party of four." },
+      soup:   { name: "Secret Ingredient", room: "kitchen", say: "You take one tiny sip. Lavender and glue. Your tongue goes stiff, then your jaw, then all of you. Turns out the secret ingredient was you." },
+      dress:  { name: "A Perfect Fit", room: "sewing", say: "You slip the dress on. It fits perfectly, because it is sewing itself onto you, stitch by tiny stitch. The dress form steps aside to make room on the shelf." },
+      hug:    { name: "Big Hug", room: "cellar", say: "You reach out. The giant doll's arms close around you in a hug that goes on, and on, and on. It's very cosy. It's also forever." },
+      circle: { name: "Inside the Lines", room: "chamber", say: "You step into the circle. The chalk lines tighten around your ankles like laces. 'Thank you,' purrs the Doll Man. 'You've saved me a step.'" },
+      finale: { name: "His Finest Work", room: "chamber", say: "You come within reach. Needle-fingers flicker, quick as a sewing machine. When he's done, he holds up a hand mirror. You've never looked so lovely. Or so still." },
+    },
+    clues: {
+      dollKey: "A doll on the nursery pillow is hugging a small brass key.",
+      lockedNursery: "The nursery door is locked. Small brass keyhole.",
+      mirror: "The mirror showed a doll's face. It's mine. I'm being turned into a doll.",
+      maribel: "Maribel's note: the workshop lock uses the teacups, in the order the guests came to tea. Maribel, then Theo, then Mrs. Hollis. And: don't sit down.",
+      clock: "The hall clock is a hair from thirteen. Don't wind it.",
+      portrait: "The Doll Man's portrait hangs crooked, as if something is behind it.",
+      ribbon: "Behind the portrait: a ribbon with his true name, AMBROSE FENNICK.",
+      clefHole: "The music room door has a curly treble-clef keyhole.",
+      padlock: "The workshop padlock has 3 picture dials: rose, bell, moon, star, heart.",
+      cupRose: "Maribel's teacup has a rose on it.",
+      cupBell: "Theo's teacup has a bell on it.",
+      cupMoon: "Mrs. Hollis's teacup has a moon on it.",
+      chair: "The empty chair at the tea party is meant for me. Don't sit.",
+      cozy: "Something lumpy is hidden under the tea cozy.",
+      boxNoKey: "Wren's music box has a keyhole but no winding key.",
+      diary: "Diary: when Wren's lullaby plays, the Doll Man can't move a stitch. He keeps the cellar key in the music box drawer.",
+      pot: "Something brass glints at the bottom of the kitchen pot. Too hot for hands. Don't taste it.",
+      recipe: "Recipe: the guest is bound at the wrist with red thread and stitched to an empty doll below the house. The guest must not find the scissors.",
+      cellarLock: "The cellar door in the kitchen has an iron padlock.",
+      lullaby: "Wound the music box. The lullaby plays, and it held an iron key.",
+      dress: "The dress in the workshop is exactly my size. Don't try it on.",
+      patterns: "A pattern on the workshop wall says AMBROSE, crossed out. His old name?",
+      ritual: "Ritual book: cut the red thread and the guest goes free. Stitch the maker's true name onto an empty heart, and he becomes the doll.",
+      keeper: "A giant doll guards the cellar shelf. It wants a hug (no!). It seems to be listening for something sweet.",
+      bell: "The cellar bell-pull is wired into the shelf, right behind the giant doll's elbow.",
+      dollman: "The Doll Man waits in the chamber. Don't get within reach while he can move.",
+      frozen: "The lullaby froze the Doll Man.",
+      free: "I cut the red thread. I'm free.",
+      emptydoll: "An empty doll with my face lies on the altar. Its heart patch is blank, waiting for a name.",
+      tunnel: "A tunnel of morning light opened in the chamber wall.",
+      gate: "The garden gate is tied shut with red thread.",
+    },
+    rooms: {
+      nursery: { name: "The Nursery", spots: [
+        { id: "beddoll", name: "Doll on the pillow", x: 38, y: 42, w: 26, h: 26, tap: "use", quiet: "has:key | nurseryOpen",
+          look: [{ if: "!has:key & !nurseryOpen", clue: "dollKey", say: "A doll in a nightcap sits on the pillow, hugging a small brass key like a teddy bear." },
+                 { say: "The doll on the pillow. Its hands are empty now. You're almost sure its head was facing the other way before." }],
+          use: [{ if: "!has:key & !nurseryOpen", give: "key", clue: "dollKey", say: "You ease the brass key out of its little cloth hands. They let go a bit too willingly." },
+                { say: "You'd rather not touch it again." }],
+          talk: { say: "'Goodnight,' you whisper. It doesn't say goodnight back. You're grateful." } },
+        { id: "bed", name: "Canopy bed", x: 6, y: 56, w: 32, h: 30, tap: "look1",
+          look: { say: "A frilly canopy bed with the covers turned down, just for you. The pillow is warm. The sheets are stitched to the mattress on three sides. Lying down here would be a very final nap." },
+          use: { die: "bed" }, talk: { say: "You tell the bed no. Firmly." } },
+        { id: "mirror", name: "Vanity mirror", x: 68, y: 24, w: 24, h: 38, quiet: "mirrorSeen",
+          look: [{ if: "!mirrorSeen", set: "mirrorSeen", fx: "mirror", clue: "mirror", sfx: "sting",
+                   say: "You lean into the vanity mirror. Painted cheeks. Glossy ringlets. A lace collar. Glass-bright eyes. It takes a long moment to realise the doll in the glass is YOU." },
+                 { say: "You, in doll clothes, with doll cheeks. You look away before the reflection does." }],
+          use: { say: "You scrub at your painted cheeks. Nothing smudges. You decide not to think about that yet." },
+          talk: { say: "'Who are you?' you ask the mirror. The doll in the glass mouths the words a moment late." } },
+        { id: "toybox", name: "Toy chest", x: 96, y: 62, w: 32, h: 24, quiet: "readNote",
+          look: { set: "readNote", clue: "maribel", say: "Under a pile of glass-eyed bears is a folded note: 'He locks his workshop with our teacups, in the order we came to tea. Me first, then Theo, then poor Mrs. Hollis. Whatever you do, don't sit down. - Maribel'" },
+          use: { set: "readNote", clue: "maribel", say: "You dig through the bears and reread Maribel's note: the workshop lock is the teacups, in the order they came to tea. Maribel, Theo, Mrs. Hollis." } },
+        { id: "window", name: "Window", x: 100, y: 10, w: 26, h: 28,
+          look: { say: "The window shows a sunny garden. It's painted on. So is the sun." },
+          use: { say: "You knock on the glass. It's wood. Painted wood. The garden smiles back at you." } },
+        { id: "door", name: "Nursery door", x: 132, y: 22, w: 26, h: 66, tap: "use",
+          look: [{ if: "nurseryOpen", say: "The door to the upstairs hall, open now. The hall smells of candle smoke." },
+                 { clue: "lockedNursery", say: "A white door with a small brass keyhole. Locked from this side, which is a rude way to build a nursery." }],
+          use: [{ if: "nurseryOpen", go: "hall" },
+                { clue: "lockedNursery", say: "Locked. The keyhole is small and brass. Somebody in this room is holding something small and brass." }],
+          on: { key: { take: "key", set: "nurseryOpen", sfx: "unlock", say: "The brass key turns with a tiny, satisfied click, and the door swings open all by itself. How welcoming." } } },
+      ] },
+      hall: { name: "The Upstairs Hall", first: "A long hall papered in faded roses. Candles flicker in brass sconces. Four doors, a clock, and a portrait that is definitely looking at you.", spots: [
+        door("nurseryDoor", "Nursery door", 2, 26, 22, 60, "nursery", "The nursery. The bed is still turned down for you. Hard pass."),
+        { id: "clock", name: "Grandfather clock", x: 28, y: 16, w: 22, h: 70, tap: "look1",
+          look: { clue: "clock", say: "A tall clock with THIRTEEN numbers on its face. The hands are a hair from thirteen. A brass crank sticks out, begging to be wound. Winding it would take the clock to thirteen, and you'd rather not find out." },
+          use: { die: "clock" }, talk: { say: "'Tick,' you say. 'Tock,' it agrees, a little too close to your ear." } },
+        { id: "portrait", name: "Portrait", x: 56, y: 10, w: 28, h: 34, tap: "look1", quiet: "gotRibbon",
+          look: [{ if: "!gotRibbon", clue: "portrait", say: "A portrait of a man in a cracked porcelain mask and a tall hat bristling with pins. The brass plate reads THE DOLL MAN. It hangs crooked, as if something tucked behind it is pushing." },
+                 { say: "The Doll Man's portrait, crooked again. You're sure it's smiling wider than before." }],
+          use: [{ if: "!gotRibbon", set: "gotRibbon", give: "ribbon", clue: "ribbon", say: "You tilt the frame. Tucked behind it is a satin ribbon embroidered AMBROSE FENNICK, TOYMAKER. He hid his old name behind his own face." },
+                { say: "Nothing else back there but dust and a dead moth in a tiny bonnet." }],
+          talk: { say: "'Lovely hat,' you tell the portrait. Its eyes look pleased." } },
+        { id: "musicDoor", name: "Music room door", x: 88, y: 26, w: 22, h: 58, tap: "use",
+          look: [{ if: "musicOpen", say: "The music room is open. Faint tinkling comes from inside, though nothing is playing." },
+                 { clue: "clefHole", say: "A door painted with music notes. Its keyhole curls like a treble clef." }],
+          use: [{ if: "musicOpen", go: "music" }, { clue: "clefHole", say: "Locked. The keyhole curls like a treble clef. You'll need a key with that same curl." }],
+          on: { clef: { take: "clef", set: "musicOpen", sfx: "unlock", say: "The clef key slides into the curly keyhole like a note onto a stave. Click." } } },
+        { id: "sewDoor", name: "Workshop door", x: 114, y: 26, w: 22, h: 58, tap: "use",
+          look: [{ if: "sewOpen", say: "The workshop door, unlocked. It smells of sawdust and lavender." },
+                 { clue: "padlock", say: "A sign says WORKSHOP - NO GUESTS. A padlock with three picture dials holds it shut. Each dial shows a rose, a bell, a moon, a star or a heart." }],
+          use: [{ if: "sewOpen", go: "sewing" }, { fx: "lock", clue: "padlock", say: "Three picture dials. Pick one picture on each." }],
+          code: { "ROSE-BELL-MOON": { if: "!sewOpen", set: "sewOpen", sfx: "unlock", say: "Rose, bell, moon. The dials click into place and the padlock drops open with a sigh." } } },
+        door("stairs", "Stairs down", 138, 30, 22, 62, "parlor", "A narrow staircase down. You can hear a teaspoon tapping on china."),
+      ] },
+      parlor: { name: "The Parlor", first: "A tea party is in full swing. Well, 'swing' is generous. Nobody is moving.", spots: [
+        door("stairsUp", "Stairs up", 2, 16, 24, 70, "hall", "The stairs back up to the hall."),
+        { id: "maribel", name: "Doll in a blue bonnet", x: 28, y: 36, w: 22, h: 36,
+          look: { clue: "cupRose", say: "A doll in a blue bonnet, with freckles painted on. Her place card says MARIBEL. Her teacup has a little ROSE on it." },
+          use: { clue: "cupRose", say: "Her hand is cold china. You let go. Her teacup has a little rose on it." },
+          talk: { say: "'Maribel?' Her glass eyes don't move. Somewhere inside her, a spring creaks, like a sigh." } },
+        { id: "theo", name: "Doll in a cap", x: 52, y: 36, w: 22, h: 36,
+          look: { clue: "cupBell", say: "A doll in a delivery boy's cap. His place card says THEO. His teacup has a little BELL on it." },
+          use: { clue: "cupBell", say: "You straighten his cap. It was the least you could do. His teacup has a little bell on it." },
+          talk: { say: "'Parcel for Theo?' you try. He doesn't sign for it." } },
+        { id: "hollis", name: "Doll in pearls", x: 76, y: 36, w: 22, h: 36,
+          look: { clue: "cupMoon", say: "A doll in pearls with a neat grey bun. Her place card says MRS. HOLLIS. Her teacup has a little crescent MOON on it." },
+          use: { clue: "cupMoon", say: "You pat her hand. Her pearls click like teeth. Her teacup has a little moon on it." },
+          talk: { say: "'Mrs. Hollis?' Her painted smile is very polite, and very sorry." } },
+        { id: "chair", name: "Empty chair", x: 102, y: 42, w: 24, h: 44, tap: "look1",
+          look: { clue: "chair", say: "One chair is empty. Its place card says GUEST OF HONOUR, and a cup of tea is steaming, just for you. Sitting down feels like the last thing you'd ever decide." },
+          use: { die: "tea" }, talk: { say: "'No thank you,' you tell the chair. It creaks, offended." } },
+        { id: "teapot", name: "Teapot", x: 56, y: 74, w: 26, h: 22, tap: "use", quiet: "gotClef",
+          look: [{ if: "!gotClef", clue: "cozy", say: "A teapot wearing a knitted cozy. The cozy has a lump in it that is not teapot-shaped." }, { say: "A bare teapot. It looks embarrassed." }],
+          use: [{ if: "!gotClef", set: "gotClef", give: "clef", clue: "cozy", say: "You lift the tea cozy. Tied to the teapot's handle is a brass key with a curly treble-clef head." },
+                { say: "You pour a cup. Sawdust comes out. You stop pouring." }] },
+        door("kitchenDoor", "Kitchen door", 132, 20, 26, 68, "kitchen", "A swinging door to the kitchen. Something in there is bubbling."),
+      ] },
+      music: { name: "The Music Room", first: "A music room. A piano, a pedestal, and a hush so thick you could spread it on toast.", spots: [
+        door("door", "Door to the hall", 2, 20, 24, 68, "hall", "Back out to the hall."),
+        { id: "piano", name: "Piano", x: 28, y: 40, w: 46, h: 46,
+          look: { say: "An upright piano. One key is missing, like a lost tooth. The sheet music is a lullaby called WREN." },
+          use: { say: "You plink one note. Every doll in the house turns its head a tiny bit toward the sound. You stop plinking." },
+          talk: { say: "You hum at the piano. It hums back. You stop humming." } },
+        { id: "curtains", name: "Curtains", x: 78, y: 6, w: 30, h: 30,
+          look: { say: "Heavy velvet curtains. Behind them is a wall. Of course it is." }, use: { say: "You draw the curtains. Wall. You undraw them." } },
+        { id: "box", name: "Music box", x: 84, y: 42, w: 26, h: 28, tap: "use", show: "!gotBox",
+          look: { clue: "boxNoKey", say: "A music box with a tiny dancer in a pink dress on top. A little keyhole in the side, but its winding key is missing, so the dancer is stuck mid-twirl." },
+          use: { set: "gotBox", give: "box", clue: "boxNoKey", say: "You take the music box. Painted under its base: WREN. Its winding key is missing." } },
+        { id: "stand", name: "Music stand", x: 116, y: 24, w: 28, h: 42, quiet: "readDiary",
+          look: { set: "readDiary", clue: "diary", say: "A diary page is clipped to the music stand: 'Wren's lullaby. When her music box plays, I cannot move a stitch. I can only stand and listen. I keep the cellar key in its little drawer, where no guest will ever think to wind it.' - A.F." },
+          use: { set: "readDiary", clue: "diary", say: "You reread the diary page: when Wren's lullaby plays, he cannot move a stitch. And the cellar key hides in the music box's drawer." } },
+      ] },
+      kitchen: { name: "The Kitchen", first: "A kitchen. A pot bubbles on the stove all by itself. You don't want to know who it's cooking for.", spots: [
+        door("door", "Door to the parlor", 2, 20, 22, 68, "parlor", "The swinging door back to the parlor."),
+        { id: "ladle", name: "Ladle", x: 28, y: 8, w: 24, h: 26, tap: "use", show: "!gotLadle",
+          look: { say: "A long iron ladle hangs on a hook. Long enough to reach the bottom of most things." },
+          use: { set: "gotLadle", give: "ladle", say: "You take the ladle. It's long enough to reach the bottom of most things." } },
+        { id: "pot", name: "Bubbling pot", x: 28, y: 40, w: 32, h: 28, tap: "look1",
+          look: [{ if: "!gotWind", clue: "pot", say: "A pot of thick pink soup bubbles away, smelling of glue and lavender. Something brass glints at the bottom. Too hot for hands. And tasting it would be a terrible, terrible idea." },
+                 { say: "Pink soup, still bubbling. It smells worse now that you know there's no key in it. Tasting it is still a terrible idea." }],
+          use: { die: "soup" },
+          talk: { say: "You blow on the soup. It blows back." },
+          on: { ladle: [{ if: "!gotWind", set: "gotWind", take: "ladle", give: "windkey", sfx: "get", say: "You fish around with the ladle and scoop up a tiny brass winding key, dripping pink. You leave the ladle in the pot. It's earned a rest." }] } },
+        { id: "oven", name: "Oven", x: 28, y: 70, w: 32, h: 24,
+          look: { say: "Inside the cold oven, a tray of little porcelain faces is cooling. None of them look surprised. Yet." },
+          use: { say: "You close the oven door. Quietly. Very quietly." } },
+        { id: "recipe", name: "Recipe card", x: 66, y: 28, w: 24, h: 28, quiet: "readRecipe",
+          look: { set: "readRecipe", clue: "recipe", say: "A recipe card in spidery writing. ONE PERFECT DOLL: take one guest. Seat at the tea table. Bind at the wrist with red thread. Stitch to the empty doll below the house. Do NOT let the guest find the scissors." },
+          use: { set: "readRecipe", clue: "recipe", say: "You reread the recipe. Red thread at the wrist. An empty doll below the house. And the guest must never find the scissors." } },
+        { id: "cupboard", name: "Cupboard", x: 96, y: 16, w: 26, h: 44,
+          look: { say: "Jars and jars of buttons, sorted by how much they look like eyes." },
+          use: { say: "You open the cupboard. Every button jar rattles at once. You close the cupboard." } },
+        { id: "cellarDoor", name: "Cellar door", x: 130, y: 22, w: 28, h: 66, tap: "use",
+          look: [{ if: "cellarOpen", say: "The cellar door stands open. Stone steps lead down into the cold." },
+                 { clue: "cellarLock", say: "A heavy door with an iron padlock. Scratched into the wood: BELOW. Cold air leaks under it." }],
+          use: [{ if: "cellarOpen", go: "cellar" }, { clue: "cellarLock", say: "Padlocked with plain iron. Wherever its key is, he hid it somewhere no guest would think to look." }],
+          on: { cellarkey: { take: "cellarkey", set: "cellarOpen", sfx: "unlock", say: "The iron key turns stiffly. The cellar door groans open onto stone steps and cold, damp dark." } } },
+      ] },
+      sewing: { name: "The Workshop", first: "His workshop. Half-finished dolls watch from every shelf. One of them waves. No, it doesn't. Probably.", spots: [
+        door("door", "Door to the hall", 2, 20, 22, 68, "hall", "Back out to the hall."),
+        { id: "dress", name: "Dress form", x: 26, y: 18, w: 24, h: 68, tap: "look1",
+          look: { clue: "dress", say: "A pink dress on a dress form, with lace cuffs and a sash. It's your size. Exactly your size. Trying it on would be the final fitting." },
+          use: { die: "dress" }, talk: { say: "'It's not my colour,' you tell the dress. It disagrees silently." } },
+        { id: "patterns", name: "Sewing patterns", x: 54, y: 6, w: 32, h: 28,
+          look: { clue: "patterns", say: "Paper patterns are pinned to the wall: arms, legs, a face. One is labelled with YOUR measurements. An old one is labelled AMBROSE, crossed out three times." },
+          use: { clue: "patterns", say: "You unpin your own pattern and tear it in half. Petty. Satisfying. The AMBROSE one you leave." } },
+        { id: "table", name: "Worktable", x: 54, y: 50, w: 34, h: 28,
+          look: { say: "Half-made dolls lie on the worktable with their stuffing showing. Just stuffing. Nothing worse. Keep telling yourself that." },
+          use: { say: "You tidy the half-made dolls into a row. They look grateful. That's worse." },
+          talk: { say: "'Hello?' Several little heads turn toward you. You leave it there." } },
+        { id: "book", name: "Ritual book", x: 90, y: 12, w: 28, h: 32, quiet: "readRitual",
+          look: { set: "readRitual", clue: "ritual", say: "An old book lies open: 'What is stitched may be unstitched. Cut the red thread, and the guest goes free. A maker may be made. Stitch the maker's true name onto an empty heart, and he becomes the doll.'" },
+          use: { set: "readRitual", clue: "ritual", say: "You reread the book: cut the red thread to go free. Stitch the maker's true name onto an empty heart, and he becomes the doll." } },
+        { id: "scissors", name: "Scissors", x: 92, y: 54, w: 22, h: 24, tap: "use", show: "!gotScissors",
+          look: { say: "A pair of sharp sewing scissors. The guest was never meant to find these." },
+          use: { set: "gotScissors", give: "scissors", say: "You take the scissors. Somewhere in the house, someone tuts." } },
+        { id: "needle", name: "Pincushion", x: 116, y: 54, w: 22, h: 24, tap: "use", show: "!gotNeedle",
+          look: { say: "A tomato pincushion bristling with pins, and one long silver needle with a big eye." },
+          use: { set: "gotNeedle", give: "needle", say: "You pull the long silver needle from the pincushion. The pins seem to lean away from you." } },
+        { id: "spool", name: "Red thread", x: 138, y: 52, w: 22, h: 26, tap: "use", show: "!gotThread",
+          look: { say: "A spool of red thread, bright as a warning." },
+          use: { set: "gotThread", give: "thread", say: "You take the spool of red thread. It's warm, like it's been held." } },
+      ] },
+      cellar: { name: "The Cellar Stairs", first: "Stone steps end in a cellar lined with shelves. A doll the size of a wardrobe sits against the far shelf, arms wide open.", spots: [
+        door("up", "Stairs up", 2, 8, 26, 56, "kitchen", "Stone steps back up to the kitchen."),
+        { id: "jars", name: "Jars", x: 30, y: 10, w: 30, h: 42,
+          look: { say: "Jars of glass eyes, every colour, all looking at you. You'd love to believe they're marbles." },
+          use: { say: "You turn one jar to face the wall. The eyes inside roll back around to face you." } },
+        { id: "keeper", name: "Giant doll", x: 64, y: 22, w: 42, h: 64, tap: "look1",
+          look: [{ if: "keeperAsleep", say: "The giant doll sleeps, head tilted, a tiny whistle of a snore coming from its porcelain mouth. Let sleeping dolls lie." },
+                 { clue: "keeper", say: "A porcelain doll as big as a wardrobe, arms open for a hug. It guards the far shelf, where light leaks through a crack. Touching it would mean accepting that hug. It tilts its head, as if listening for something sweet." }],
+          use: [{ if: "keeperAsleep", say: "You tiptoe past its elbow. It mumbles in its sleep and hugs itself instead." }, { die: "hug" }],
+          talk: [{ if: "keeperAsleep", say: "Shh." }, { say: "'Hug?' it asks, in a voice like a cracked bell. You keep your distance." }],
+          on: { wbox: [{ if: "!keeperAsleep", set: "keeperAsleep", sfx: "lullaby", say: "You hold up the music box and let the lullaby drift out. The giant doll's eyelids click down, one, two, and it slumps into a deep porcelain sleep." },
+                       { say: "It's already fast asleep. Don't overdo it." }],
+                box: { say: "The music box has no winding key. Silence won't soothe anything." } } },
+        { id: "bell", name: "Bell-pull", x: 110, y: 8, w: 22, h: 46, tap: "use",
+          look: { clue: "bell", say: "A frayed velvet bell-pull hangs right behind the giant doll's elbow. Its wire runs into the shelf." },
+          use: [{ if: "passageOpen", say: "You pull it again. A tiny bell rings somewhere. Nothing else is left to open." },
+                { if: "keeperAsleep", set: "passageOpen", sfx: "door", say: "You tug the bell-pull. A distant bell tinkles, and the whole shelf swings inward on hidden hinges. A cold passage slopes down toward candlelight." },
+                { clue: "bell", say: "You reach for the bell-pull. The giant doll's head swivels toward your hand, arms already closing. You snatch your hand back just in time." }] },
+        { id: "shelf", name: "Shelf", x: 108, y: 56, w: 46, h: 40, show: "!passageOpen",
+          look: { say: "The far shelf. Cold air whistles through a crack behind it, and candlelight flickers. This is not just a shelf." },
+          use: { say: "You push the shelf. It doesn't budge. It's wired to something." } },
+        { id: "passage", name: "Hidden passage", x: 108, y: 56, w: 46, h: 40, show: "passageOpen", tap: "use",
+          look: { say: "A narrow passage behind the shelf, sloping down toward candlelight and a low, humming voice." },
+          use: { go: "chamber" } },
+      ] },
+      chamber: { name: "The Underground Chamber", firstClue: "dollman",
+        first: "A round chamber deep under the house. Candles ring a chalk circle on the floor. Beside an altar stands THE DOLL MAN, a brass key slowly turning in his back. 'My guest of honour,' he purrs. A red thread whips out of the circle and knots itself around your wrist.", spots: [
+        { id: "back", name: "Passage up", x: 2, y: 8, w: 22, h: 56, tap: "use",
+          look: { say: "The passage back up to the cellar." },
+          use: [{ if: "!free & !defeated", go: "cellar", say: "The red thread pays out behind you like a kite string. He lets you go. He's very patient." }, { go: "cellar" }] },
+        { id: "dollman", name: "The Doll Man", x: 58, y: 4, w: 40, h: 72, tap: "look1", show: "!defeated",
+          look: [{ if: "frozen", say: "The Doll Man stands frozen, head tilted toward the lullaby, his painted smile wobbling. Only his glass eyes move, following you." },
+                 { clue: "dollman", say: "The Doll Man: cracked porcelain mask, painted smile, a top hat full of pins, a tape-measure scarf and needles for fingers. He's waiting for you to come within reach. That would be a mistake." }],
+          use: [{ if: "frozen", say: "You poke him. He's stiff as a shop dummy. Don't push your luck." }, { die: "finale" }],
+          talk: [{ if: "frozen", say: "'Nice hat,' you say. He can't answer. His eyes say plenty." },
+                 { say: "'Let me go,' you say. 'Of course,' he says. 'Right after your fitting.' He hums, and the thread on your wrist tugs you a step closer." }],
+          on: { wbox: [{ if: "!frozen", set: "frozen", clue: "frozen", sfx: "lullaby", say: "You hold the music box high. Wren's lullaby fills the chamber. The Doll Man stops dead, one needle-finger raised. 'Wren?' he whispers. He cannot move a stitch." },
+                       { say: "It's still playing. He's still listening." }],
+                scissors: [{ if: "frozen", say: "Stabbing a doll won't help. The book told you exactly what to cut." }, { die: "finale" }],
+                ribbon: { say: "He'd never hold still for that. You need a doll, not a man." },
+                tneedle: { say: "You'd have to get within reach of those needle-fingers. You need an empty heart, not his." } } },
+        { id: "doll", name: "The Doll Man doll", x: 112, y: 36, w: 30, h: 34, show: "defeated",
+          look: { say: "A little doll in a top hat full of pins, lying on the altar. Its painted smile looks a lot less sure of itself now." },
+          use: { say: "You leave him where he is. Let him find out how the tea party feels." },
+          talk: { say: "'Comfy?' you ask. The little doll says nothing. It can't. Good." } },
+        { id: "emptydoll", name: "Empty doll", x: 108, y: 36, w: 34, h: 36, show: "!defeated",
+          look: { clue: "emptydoll", say: "On the altar lies a life-size doll in a dress like yours, with a face like yours. A heart-shaped patch on its chest is blank, waiting for a name. Your name." },
+          use: { clue: "emptydoll", say: "It's soft, and warm, and it really should not be warm." },
+          on: {
+            tneedle: [{ if: "!has:ribbon", say: "You'd need a name to stitch, and it should NOT be yours." },
+                      { if: "!frozen", say: "The Doll Man's needle-hand closes over yours. 'Not your work, dear.' You pull away." },
+                      { if: "!free", say: "The red thread holds your wrist back. You can't reach the altar while it's tied." },
+                      { take: "tneedle ribbon", set: "defeated", fx: "defeat", sfx: "win", clue: "tunnel",
+                        say: "You stitch AMBROSE FENNICK onto the empty heart, red stitch by red stitch. Behind you, porcelain creaks. The Doll Man shrinks, stiffens, and topples onto the altar, a small doll with a painted smile. The candles gutter and grey morning light opens a tunnel in the wall." }],
+            ribbon: [{ if: "!has:tneedle", say: "His name needs stitching on, and you've nothing to stitch with. A needle and thread would do." },
+                     { if: "!frozen", say: "The Doll Man's needle-hand closes over yours. 'Not your work, dear.' You pull away." },
+                     { if: "!free", say: "The red thread holds your wrist back. You can't reach the altar while it's tied." },
+                     { take: "tneedle ribbon", set: "defeated", fx: "defeat", sfx: "win", clue: "tunnel",
+                       say: "You stitch AMBROSE FENNICK onto the empty heart, red stitch by red stitch. Behind you, porcelain creaks. The Doll Man shrinks, stiffens, and topples onto the altar, a small doll with a painted smile. The candles gutter and grey morning light opens a tunnel in the wall." }],
+            needle: { say: "A needle with no thread won't hold a name." } } },
+        { id: "thread", name: "Red thread", x: 26, y: 62, w: 28, h: 34, show: "!free",
+          look: [{ if: "frozen", say: "The red thread runs from your wrist into the chalk circle. It's gone slack now that he's frozen." },
+                 { say: "A red thread is knotted tight around your wrist and runs into the chalk circle. Every time he hums, it tugs you a step closer." }],
+          use: { say: "You tug at the knot. It's a toymaker's knot. Fingers won't undo it." },
+          on: { scissors: [{ if: "frozen", set: "free", clue: "free", sfx: "snip", say: "Snip. The red thread falls from your wrist, and the stitches on your arm loosen and drop away like loose threads. You're your own again." },
+                           { say: "You raise the scissors. He tuts, and the thread yanks your arm down. Not while he's watching." }] } },
+        { id: "circle", name: "Chalk circle", x: 56, y: 78, w: 50, h: 20, tap: "look1",
+          look: { say: "A chalk circle ringed with candles, with a doll-shaped outline drawn in the middle. Your size. Stepping inside would finish his work for him." },
+          use: [{ if: "defeated", say: "The chalk has smudged into nothing. Just a floor now." }, { die: "circle" }] },
+        { id: "tunnel", name: "Tunnel of light", x: 128, y: 6, w: 30, h: 28, show: "defeated", tap: "use",
+          look: { say: "A tunnel of grey morning light, and a breeze that smells of wet grass." },
+          use: { go: "escape" } },
+      ] },
+      escape: { name: "Outside, at Dawn", first: "You climb out into a cold grey dawn. Behind you stands the dollhouse, ordinary-looking except for its painted-on windows. Ahead, a garden gate.", spots: [
+        { id: "house", name: "The dollhouse", x: 6, y: 8, w: 56, h: 70,
+          look: { say: "The dollhouse, from outside. In one window, three little dolls at a tea party seem to be smiling. Real smiles, this time." },
+          use: { say: "You are NOT going back in there." } },
+        { id: "sky", name: "Sunrise", x: 70, y: 4, w: 60, h: 26,
+          look: { say: "A real sunrise. Not painted. You check twice." } },
+        { id: "gate", name: "Garden gate", x: 94, y: 36, w: 44, h: 50, tap: "use",
+          look: [{ if: "gateOpen", say: "The gate stands open. Beyond it: a real road, and a real morning." },
+                 { clue: "gate", say: "The garden gate is tied shut with one last loop of red thread. Of course it is." }],
+          use: [{ if: "gateOpen", set: "won", win: true, say: "You walk out through the gate and don't look back. Behind you, very faintly, a music box plays three notes and stops. Not your problem anymore." },
+                { clue: "gate", say: "You pick at the red knot. It's tight, but it's only thread now." }],
+          on: { scissors: [{ if: "!gateOpen", set: "gateOpen", sfx: "snip", say: "Snip. The gate swings open. Morning air rushes in, smelling of wet grass and nothing at all like lavender." }] } },
+      ] },
+    },
+    // hints: the first goal that is open (`when`) and not done. scene = the hotspot (or inv:item) that shows the clue; text = the clue id
+    goals: [
+      { id: "key", when: "", done: "has:key | nurseryOpen", scene: "nursery.beddoll", text: "dollKey",
+        hints: ["Someone in this room is holding on to something.", "The doll on the pillow is hugging a small brass key.", "Tap the doll on the pillow to take its key."] },
+      { id: "nursery", when: "has:key", done: "nurseryOpen", scene: "nursery.door", text: "lockedNursery",
+        hints: ["That key wants a keyhole.", "The nursery door has a small brass keyhole.", "Tap the brass key in your bag, then tap the door."] },
+      { id: "clef", when: "nurseryOpen", done: "gotClef", scene: "parlor.teapot", text: "cozy",
+        hints: ["The music room needs a curly key. Explore downstairs.", "Something under the parlor's tea cozy is not a teapot.", "In the parlor, tap the teapot to lift its cozy."] },
+      { id: "music", when: "has:clef", done: "musicOpen", scene: "hall.musicDoor", text: "clefHole",
+        hints: ["A curly key for a curly keyhole.", "The music room door in the hall has a treble-clef keyhole.", "Tap the clef key, then the music room door in the hall."] },
+      { id: "box", when: "musicOpen", done: "gotBox", scene: "music.box", text: "boxNoKey",
+        hints: ["Something in the music room is small enough to carry.", "The music box on the pedestal is missing its winding key.", "Tap the music box to take it."] },
+      { id: "wind", when: "seen:kitchen", done: "gotWind", scene: "kitchen.pot", text: "pot",
+        hints: ["Something brass glints in the kitchen.", "A tiny key lies at the bottom of the bubbling pot. Don't taste it. Don't use your hands.", "Take the ladle from its hook, then use the ladle on the pot."] },
+      { id: "wound", when: "gotBox & gotWind", done: "boxWound", scene: "inv:box", text: "boxNoKey",
+        hints: ["A box without a key, and a key without a box.", "The tiny winding key fits the music box's keyhole.", "Tap the winding key, then tap the music box in your bag."] },
+      { id: "sew", when: "nurseryOpen", done: "sewOpen", scene: "parlor.maribel", text: "maribel",
+        hints: ["The workshop padlock has picture dials. Someone left a note about it in the nursery.", "Maribel's note: the teacups, in the order the guests came to tea. Look at the cups in the parlor.", "Set the workshop dials to ROSE, BELL, MOON."] },
+      { id: "scissors", when: "sewOpen", done: "gotScissors", scene: "sewing.scissors", text: "recipe",
+        hints: ["The recipe said the guest must never find something.", "There are scissors on the workshop table.", "Tap the scissors in the workshop."] },
+      { id: "tneedle", when: "sewOpen", done: "has:tneedle | defeated", scene: "sewing.needle", text: "ritual",
+        hints: ["You'll need to stitch something later. The workshop has what you need.", "Take the needle from the pincushion and the red thread from the spool.", "Then tap the needle, then tap the thread, to thread it."] },
+      { id: "ribbon", when: "sewOpen", done: "gotRibbon", scene: "hall.portrait", text: "portrait",
+        hints: ["The ritual needs his true name. He hid it behind his own face.", "The Doll Man's portrait in the hall hangs crooked.", "Tap the portrait in the hall twice to look behind it."] },
+      { id: "cellar", when: "has:cellarkey", done: "cellarOpen", scene: "kitchen.cellarDoor", text: "cellarLock",
+        hints: ["That iron key opens something heavy.", "The cellar door in the kitchen has an iron padlock.", "Tap the iron key, then the cellar door in the kitchen."] },
+      { id: "keeper", when: "cellarOpen", done: "keeperAsleep", scene: "cellar.keeper", text: "keeper",
+        hints: ["The giant doll is listening for something sweet.", "A lullaby would send it to sleep.", "Tap the wound music box, then tap the giant doll."] },
+      { id: "passage", when: "keeperAsleep", done: "passageOpen", scene: "cellar.bell", text: "bell",
+        hints: ["With the giant doll asleep, you can reach behind it.", "The bell-pull is wired into the shelf.", "Tap the bell-pull."] },
+      { id: "enter", when: "passageOpen", done: "seen:chamber", scene: "cellar.passage", text: "bell",
+        hints: ["The shelf moved. Something is below.", "A passage opened behind the shelf.", "Tap the hidden passage."] },
+      { id: "freeze", when: "seen:chamber", done: "frozen", scene: "chamber.dollman", text: "diary",
+        hints: ["The diary in the music room said what stops him.", "When Wren's lullaby plays, the Doll Man can't move a stitch.", "Tap the wound music box, then tap the Doll Man."] },
+      { id: "free", when: "frozen", done: "free", scene: "chamber.thread", text: "ritual",
+        hints: ["You're still tied to his circle.", "The ritual book: cut the red thread and the guest goes free.", "Tap the scissors, then tap the red thread at your wrist."] },
+      { id: "defeat", when: "free", done: "defeated", scene: "chamber.emptydoll", text: "ritual",
+        hints: ["A maker may be made.", "Stitch his true name onto the empty doll's heart.", "Tap the threaded needle (or the name ribbon), then tap the empty doll."] },
+      { id: "out", when: "defeated", done: "seen:escape", scene: "chamber.tunnel", text: "tunnel",
+        hints: ["There's a way out now.", "Morning light comes from a new tunnel in the wall.", "Tap the tunnel of light."] },
+      { id: "gate", when: "seen:escape", done: "gateOpen", scene: "escape.gate", text: "gate",
+        hints: ["One last loop of red.", "The gate is tied shut with red thread.", "Tap the scissors, then tap the gate."] },
+      { id: "win", when: "gateOpen", done: "won", scene: "escape.gate", text: "gate",
+        hints: ["Go on. You've earned it.", "The gate is open.", "Tap the gate to walk out."] },
+    ],
+  };
+});
+
+// THE DOLL MAN - game rules (pure, no drawing). The SAME file runs inside game.html (inlined by tools/build.py)
+// and in Node for the robot solver (test/solver.js), so the solver proves things about the real rules.
+// A "state" is plain JSON: { room, flags: {name: true}, inv: [item ids], journal: [clue ids], seen: {room: true}, turns, stage, looked: {hotspot: true} }
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory();
+  else root.RULES = factory();
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+  // ---- tiny condition language: "flag & !other & has:item | (a & b)" ----
+  const condCache = {};
+  function compile(src) {
+    if (src == null || src === "") return () => true;
+    if (condCache[src]) return condCache[src];
+    const toks = src.match(/has:[\w]+|seen:[\w]+|looked:[\w.]+|[\w]+|[!&|()]/g) || [];
+    let i = 0;
+    const peek = () => toks[i], next = () => toks[i++];
+    function prim() {
+      const t = next();
+      if (t === "!") { const f = prim(); return s => !f(s); }
+      if (t === "(") { const f = or(); next(); return f; }
+      if (t.startsWith("has:")) { const k = t.slice(4); return s => s.inv.includes(k); }
+      if (t.startsWith("seen:")) { const k = t.slice(5); return s => !!s.seen[k]; }
+      if (t.startsWith("looked:")) { const k = t.slice(7); return s => !!s.looked[k]; }
+      return s => !!s.flags[t];
+    }
+    function and() { let f = prim(); while (peek() === "&") { next(); const a = f, b = prim(); f = s => a(s) && b(s); } return f; }
+    function or() { let f = and(); while (peek() === "|") { next(); const a = f, b = and(); f = s => a(s) || b(s); } return f; }
+    const fn = or();
+    if (i !== toks.length) throw new Error("bad condition: " + src);
+    return (condCache[src] = fn);
+  }
+  const test = (src, s) => compile(src)(s);
+  const list = v => (v ? (Array.isArray(v) ? v : String(v).split(/\s+/).filter(Boolean)) : []);
+  const clone = s => JSON.parse(JSON.stringify(s));
+
+  function init(story) {
+    const s = { room: story.start, flags: {}, inv: [], journal: [], seen: {}, turns: 0, stage: 0, looked: {} };
+    s.seen[story.start] = true;
+    return s;
+  }
+  const room = (story, s) => story.rooms[s.room];
+  // hotspots the player can see right now
+  function hotspots(story, s) { return room(story, s).spots.filter(h => test(h.show, s)); }
+  function spot(story, s, id) { return hotspots(story, s).find(h => h.id === id); }
+  // a "quiet" hotspot has nothing new to give (no sparkle). It still answers taps.
+  function isQuiet(story, s, h) { return h.quiet != null ? test(h.quiet, s) : false; }
+  // pick the first alternative whose `if` passes
+  function pick(alts, s) {
+    if (!alts) return null;
+    for (const a of (Array.isArray(alts) ? alts : [alts])) if (test(a.if, s)) return a;
+    return null;
+  }
+  // which verb a single tap means on this hotspot
+  function tapVerb(story, s, h) {
+    const t = h.tap || "look";
+    if (t === "look1") return s.looked[s.room + "." + h.id] ? "use" : "look";
+    return t;
+  }
+  // ---- apply one player action. act = {verb:'look'|'use'|'talk', spot} | {verb:'item', item, spot} | {verb:'combine', a, b} | {verb:'code', spot, value}
+  // Returns { state, say, die, win, clue, go, fx, sfx, changed }. Never mutates the input state.
+  function apply(story, s0, act) {
+    const s = clone(s0), out = { state: s, say: "", die: null, win: false, clues: [], go: null, fx: null, sfx: null, changed: false };
+    let a = null;
+    if (act.verb === "combine") {
+      const c = story.combos.find(c => (c.a === act.a && c.b === act.b) || (c.a === act.b && c.b === act.a));
+      if (!c || !s.inv.includes(act.a) || !s.inv.includes(act.b)) a = { say: pickLine(story.lines.noCombine, s) };
+      else a = pick(c.do, s) || { say: pickLine(story.lines.noCombine, s) };
+    } else {
+      const h = spot(story, s, act.spot);
+      if (!h) return out;                                    // not visible: nothing happens
+      if (act.verb === "look") { s.looked[s.room + "." + h.id] = true; a = pick(h.look, s) || { say: h.name + "." }; }
+      else if (act.verb === "use") a = pick(h.use, s) || { say: pickLine(story.lines.noUse, s) };
+      else if (act.verb === "talk") a = pick(h.talk, s) || { say: pickLine(story.lines.noTalk, s) };
+      else if (act.verb === "item") {
+        if (!s.inv.includes(act.item)) return out;
+        a = pick(h.on && h.on[act.item], s) || pick(h.on && h.on["*"], s) || { say: pickLine(story.lines.noItem, s) };
+      } else if (act.verb === "code") {
+        a = pick(h.code && h.code[act.value], s) || { quietFail: true };
+      }
+    }
+    if (!a || a.quietFail) return out;
+    if (a.die) { out.die = a.die; out.say = a.say || ""; out.sfx = "die"; return out; }   // the state does NOT change: rewind = stay
+    for (const f of list(a.set)) s.flags[f] = true;
+    for (const f of list(a.unset)) delete s.flags[f];
+    for (const it of list(a.take)) s.inv = s.inv.filter(x => x !== it);
+    for (const it of list(a.give)) if (!s.inv.includes(it)) s.inv.push(it);
+    out.clueAll = list(a.clue);
+    for (const c of list(a.clue)) if (!s.journal.includes(c)) { s.journal.push(c); out.clues.push(c); }
+    let say = a.say || "";
+    if (a.go) { s.room = a.go; out.go = a.go; const r = story.rooms[a.go]; if (!s.seen[a.go]) { s.seen[a.go] = true; if (r.first) say += (say ? " " : "") + r.first; for (const c of list(r.firstClue)) if (!s.journal.includes(c)) { s.journal.push(c); out.clues.push(c); } } }
+    if (a.win) out.win = true;
+    out.fx = a.fx || null; out.sfx = a.sfx || (a.give ? "get" : a.go ? "door" : null);
+    // the story-only timer: stitches creep up your arm. It NEVER ends the game.
+    s.turns++;
+    const T = story.timer;
+    if (s.stage < T.at.length && s.turns >= T.at[s.stage] && !out.win && !s.flags[T.stop]) { say += (say ? " " : "") + T.lines[s.stage]; s.stage++; }
+    out.say = say;
+    out.changed = JSON.stringify(s) !== JSON.stringify(s0);
+    return out;
+  }
+  function pickLine(arr, s) { return arr[s.turns % arr.length]; }
+  // ---- hints: the first goal that is open (its `when` passes) and not done
+  function hintGoal(story, s) { return story.goals.find(g => test(g.when, s) && !test(g.done, s)) || null; }
+  // ---- every action the solver may try in a state (the UI can do all of these)
+  function actions(story, s) {
+    const acts = [], hs = hotspots(story, s);
+    for (const h of hs) {
+      for (const v of ["look", "use", "talk"]) acts.push({ verb: v, spot: h.id });
+      for (const it of s.inv) acts.push({ verb: "item", item: it, spot: h.id });
+      if (h.code) for (const v of story.codeValues) acts.push({ verb: "code", spot: h.id, value: v });
+    }
+    for (let i = 0; i < s.inv.length; i++) for (let j = i + 1; j < s.inv.length; j++) acts.push({ verb: "combine", a: s.inv[i], b: s.inv[j] });
+    return acts;
+  }
+  // the part of a state that matters for progress (looked/turns/stage/journal only change words, not what's possible)
+  // Only flags that some `if`/`show` condition reads can change what is possible; "I read this note" flags only change words.
+  let logicFor = null, logic = null;
+  function logicFlags(story) {
+    if (logicFor === story) return logic;
+    const used = new Set(), scan = o => { if (Array.isArray(o)) o.forEach(scan); else if (o && typeof o === "object") for (const k in o) { if ((k === "if" || k === "show") && typeof o[k] === "string") for (const t of o[k].match(/[\w:]+/g) || []) if (!t.includes(":")) used.add(t); scan(o[k]); } };
+    scan(story.rooms); scan(story.combos);
+    logicFor = story; logic = used; return used;
+  }
+  function key(s, story) { const L = logicFlags(story); return s.room + "|" + Object.keys(s.flags).filter(f => L.has(f)).sort().join(",") + "|" + s.inv.slice().sort().join(","); }
+  return { logicFlags, compile, test, init, hotspots, spot, isQuiet, tapVerb, apply, hintGoal, actions, key, clone, list };
+});
+
+const STORY = self.STORY, RU = self.RULES;
+const Q = new URLSearchParams(location.search);
+// Test switches (?room= ?solve= ?card=) live ONLY in the robot's test build (game.test.html). tools/build.py cuts
+// the marked block out of game.html, so players can never use them. While a switch is on, nothing is ever saved.
+const TEST_BUILD = false;
+let JUMP_ROOM = null, SOLVE_N = 0, CARD = false, WALK = null;
+
+const SWITCHED = !!(JUMP_ROOM || SOLVE_N || CARD);
+const STORE = "the-doll-man-v1", MUTE_KEY = "the-doll-man-muted";
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d", { alpha: false });
+const root = document.documentElement;
+if (CARD) root.classList.add("card");
+let framed = true;
+try { framed = window.self !== window.top; } catch (e) {}
+root.classList.toggle("framed", framed);
+document.addEventListener("click", e => {      // links always open a NEW tab (never replace the game inside X)
+  const a = e.target.closest && e.target.closest("a[href]");
+  if (!a) return; e.preventDefault(); window.open(a.href, "_blank", "noopener");
+}, true);
+
+// ================= PIXELS =================
+const PAL = ART.pal, SPR = ART.spr;
+const mk = (w, h) => { const c = document.createElement("canvas"); c.width = Math.max(1, w); c.height = Math.max(1, h); return c; };
+const col = c => PAL[c] || c;
+// scene painter: draws into a 160x100 buffer with integer pixels
+let g = null;
+const R = (x, y, w, h, c) => { g.fillStyle = col(c); g.fillRect(x | 0, y | 0, Math.max(0, w | 0), Math.max(0, h | 0)); };
+const px = (x, y, c) => R(x, y, 1, 1, c);
+function ell(cx, cy, rx, ry, c) { for (let y = -ry; y <= ry; y++) { const w = Math.round(rx * Math.sqrt(Math.max(0, 1 - (y * y) / (ry * ry || 1)))); R(cx - w, cy + y, 2 * w + 1, 1, c); } }
+function line(x0, y0, x1, y1, c) { x0 |= 0; y0 |= 0; x1 |= 0; y1 |= 0; const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1; let e = dx + dy; for (;;) { px(x0, y0, c); if (x0 === x1 && y0 === y1) break; const e2 = 2 * e; if (e2 >= dy) { e += dy; x0 += sx; } if (e2 <= dx) { e += dx; y0 += sy; } } }
+function dots(x, y, w, h, c, step = 2, off = 0) { for (let j = 0; j < h; j++) for (let i = (j + off) % step; i < w; i += step) px(x + i, y + j, c); }
+function spr(name, x, y, swap, s = 1, ctxOverride) {
+  const rows = SPR[name], C = ctxOverride || g;
+  for (let j = 0; j < rows.length; j++) for (let i = 0; i < rows[j].length; i++) {
+    const ch = rows[j][i]; if (ch === ".") continue;
+    const k = (swap && swap[ch]) || ch; if (k === ".") continue;
+    C.fillStyle = col(k); C.fillRect(x + i * s, y + j * s, s, s);
+  }
+}
+const DOLLS = {
+  maribel: { H: "e", D: "c", A: "w", E: "e" }, theo: { H: "B", D: "G", A: "g", E: "h" }, hollis: { H: "s", D: "m", A: "w", E: "G" },
+  bed: { H: "w", D: "L", A: "w", E: "e" }, keeper: { H: "h", D: "r", A: "w", E: "e" }, you: { H: "h", D: "P", A: "w", E: "e" },
+};
+// ---- shared scenery
+function wallStripes(c1, c2, w, y1) { R(0, 0, 160, y1, c1); for (let x = 0; x < 160; x += w * 2) R(x, 0, w, y1, c2); }
+function damask(bg, fg, y1) { R(0, 0, 160, y1, bg); for (let y = 3, r = 0; y < y1 - 2; y += 9, r++) for (let x = (r % 2) * 6 + 2; x < 160; x += 12) { px(x, y, fg); px(x - 1, y + 1, fg); px(x + 1, y + 1, fg); px(x, y + 2, fg); } }
+function boards(y0, c1, c2) { R(0, y0, 160, 100 - y0, c1); for (let y = y0 + 2, k = 1; y < 100; y += k + 1, k++) R(0, y, 160, 1, c2); for (let i = -9; i <= 9; i++) line(80 + i * 6, y0, 80 + i * 24, 100, c2); }
+function checker(y0, c1, c2) { for (let y = y0, r = 0; y < 100; y += 5, r++) for (let x = 0; x < 160; x += 6) R(x, y, 6, 5, (x / 6 + r) % 2 ? c1 : c2); }
+function wainscot(y, c, c2) { R(0, y, 160, 6, c); R(0, y, 160, 1, c2); R(0, y + 5, 160, 1, "k"); }
+function door(x, y, w, h, body, edge, open, knob = "y") {
+  R(x, y, w, h, edge);
+  if (open) { R(x + 2, y + 2, w - 4, h - 2, "k"); R(x + 3, y + h - 8, w - 6, 6, "d"); R(x + w - 5, y + 2, 3, h - 2, body); return; }
+  R(x + 2, y + 2, w - 4, h - 2, body);
+  R(x + 4, y + 5, w - 8, (h >> 1) - 8, edge); R(x + 5, y + 6, w - 10, (h >> 1) - 10, body);
+  R(x + 4, y + (h >> 1) + 2, w - 8, (h >> 1) - 6, edge); R(x + 5, y + (h >> 1) + 3, w - 10, (h >> 1) - 8, body);
+  R(x + w - 6, y + (h >> 1), 2, 2, knob);
+}
+function candleStick(x, y) { R(x - 1, y + 5, 4, 1, "Y"); R(x, y, 2, 5, "w"); }
+function vignette() { for (let i = 0; i < 3; i++) { dots(0, 0, 160, 1 + i, "k", 2 + i, i); dots(0, 99 - i, 160, 1 + i, "k", 2 + i, i); dots(0, 0, 1 + i, 100, "k", 2 + i, i); dots(159 - i, 0, 1 + i, 100, "k", 2 + i, i); } }
+function shelfDolls(x, y, n, seed) { for (let i = 0; i < n; i++) { const c = ["w", "t", "L"][(i + seed) % 3]; ell(x + i * 7 + 3, y + 3, 2, 2, c); px(x + i * 7 + 2, y + 3, "k"); px(x + i * 7 + 4, y + 3, "k"); R(x + i * 7 + 1, y + 6, 5, 3, ["P", "c", "G", "m"][(i + seed) % 4]); } R(x - 1, y + 9, n * 7 + 2, 2, "B"); }
+// THE DOLL MAN himself (40x72 box). Original design: cracked porcelain mask, painted smile, top hat full of pins,
+// tape-measure scarf, patchwork frock coat, needle fingers, a big brass wind-up key in his back.
+function dollMan(x, y, frozen, t) {
+  R(x + 10, y + 3, 20, 16, "k"); R(x + 11, y + 4, 18, 14, "d"); R(x + 12, y + 5, 3, 12, "q"); R(x + 10, y + 13, 20, 3, "R"); R(x + 4, y + 18, 32, 3, "k");
+  for (const [a, b, c] of [[12, -1, "y"], [16, -3, "R"], [20, -2, "y"], [24, -3, "w"], [28, 0, "R"], [9, 6, "y"], [31, 8, "w"]]) { const e = a < 14 ? -1 : a > 26 ? 1 : 0; line(x + a, y + 4, x + a + e, y + 4 + b, "s"); px(x + a + e, y + 3 + b, c); }
+  ell(x + 20, y + 29, 9, 9, "w"); R(x + 25, y + 22, 3, 14, "t"); px(x + 28, y + 26, "t");
+  line(x + 14, y + 21, x + 17, y + 25, "k"); line(x + 17, y + 25, x + 15, y + 29, "k"); line(x + 15, y + 29, x + 18, y + 32, "k");
+  for (const ex of [16, 24]) { ell(x + ex, y + 27, 2, 2, "k"); R(x + ex - 1, y + 26, 3, 3, frozen ? "c" : "e"); px(x + ex - 1, y + 26, "W"); }
+  R(x + 12, y + 31, 2, 1, "P"); R(x + 26, y + 31, 2, 1, "P");
+  R(x + 14, y + 34, 12, 1, "R"); px(x + 13, y + 33, "R"); px(x + 26, y + 33, "R"); px(x + 12, y + 32, "R"); px(x + 27, y + 32, "R"); for (let i = 14; i < 26; i += 2) { px(x + i, y + 33, "k"); px(x + i + 1, y + 35, "k"); }
+  for (let r = 0; r < 26; r++) { const half = 10 + Math.round(r * 0.25), yy = y + 40 + r; for (let i = -half; i < half; i++) px(x + 20 + i, yy, ["m", "p", "G", "r", "v"][(Math.floor((i + 20) / 6) + Math.floor(r / 7)) % 5]); }
+  for (let r = 0; r < 26; r += 7) dots(x + 9, y + 40 + r, 22, 1, "k", 2);
+  for (let i = -18; i <= 18; i += 6) dots(x + 20 + i, y + 40, 1, 26, "k", 2);
+  R(x + 11, y + 38, 18, 3, "y"); for (let i = 0; i < 18; i += 2) px(x + 11 + i, y + 38, "Y"); R(x + 12, y + 41, 3, 16, "y"); for (let j = 0; j < 16; j += 2) px(x + 12, y + 41 + j, "Y");
+  line(x + 9, y + 42, x + 4, y + 58, "p"); line(x + 10, y + 42, x + 5, y + 58, "p"); line(x + 31, y + 42, x + 36, y + 58, "p"); line(x + 30, y + 42, x + 35, y + 58, "p");
+  R(x + 3, y + 58, 4, 3, "w"); R(x + 34, y + 58, 4, 3, "w");
+  const lift = frozen ? 0 : (Math.sin(t * 2) > 0 ? 1 : 0);
+  for (const [hx, d] of [[4, -1], [36, 1]]) for (let f = -1; f <= 1; f++) line(x + hx + f, y + 61 - lift, x + hx + f * 2 + d, y + 67 - lift, "s");
+  R(x + 14, y + 66, 3, 5, "k"); R(x + 23, y + 66, 3, 5, "k"); R(x + 12, y + 70, 6, 2, "k"); R(x + 22, y + 70, 6, 2, "k");
+  R(x + 31, y + 47, 5, 2, "Y");
+  const ph = frozen ? 0 : Math.floor(t * 3) % 2;
+  if (ph) { ell(x + 38, y + 44, 1, 3, "y"); ell(x + 38, y + 51, 1, 3, "y"); px(x + 38, y + 44, "Y"); px(x + 38, y + 51, "Y"); }
+  else { ell(x + 38, y + 47, 2, 2, "y"); R(x + 36, y + 47, 4, 1, "Y"); }
+}
+function dollMini(x, y) { R(x + 2, y, 8, 6, "k"); R(x, y + 6, 12, 1, "k"); px(x + 3, y - 1, "s"); px(x + 7, y - 1, "s"); ell(x + 6, y + 10, 4, 3, "w"); px(x + 4, y + 9, "e"); px(x + 8, y + 9, "e"); R(x + 4, y + 12, 5, 1, "R"); R(x + 1, y + 14, 10, 6, "m"); R(x + 4, y + 14, 4, 1, "y"); }
+const R2 = (s, c) => RU.test(c, s);
+// ---- the rooms (each painted once per state change into the 160x100 scene buffer)
+const PAINT = {
+  nursery(s) {
+    wallStripes("L", "P", 4, 62); wainscot(60, "r", "P"); boards(66, "b", "B");
+    ell(80, 88, 34, 7, "r"); ell(80, 88, 30, 5, "P");
+    R(100, 10, 26, 28, "w"); R(102, 12, 22, 24, "c"); ell(112, 34, 14, 6, "G"); R(102, 32, 22, 4, "G"); ell(118, 18, 3, 3, "y"); R(112, 12, 1, 24, "w"); R(102, 23, 22, 1, "w"); R(99, 37, 28, 2, "g");
+    R(6, 26, 2, 60, "B"); R(62, 26, 2, 60, "B"); R(5, 24, 60, 4, "P"); for (let i = 0; i < 60; i += 4) R(5 + i, 28, 2, 3 + (i % 8 ? 0 : 2), "L");
+    R(60, 40, 6, 44, "B"); R(61, 41, 4, 4, "b"); R(6, 58, 56, 20, "w"); R(6, 58, 56, 3, "t"); for (let i = 8; i < 60; i += 6) dots(i, 61, 1, 16, "R", 3);
+    R(6, 70, 56, 10, "P"); R(6, 70, 56, 1, "L"); R(8, 80, 3, 6, "B"); R(56, 80, 3, 6, "B"); R(42, 52, 18, 8, "w"); R(42, 52, 18, 1, "t");
+    const has = R2(s, "!has:key & !nurseryOpen");
+    spr("doll", 44, 41, DOLLS.bed); if (has) { R(48, 55, 6, 3, "Y"); px(53, 56, "y"); }
+    R(70, 52, 22, 3, "b"); R(70, 55, 22, 6, "B"); R(72, 61, 2, 20, "B"); R(88, 61, 2, 20, "B");
+    ell(80, 37, 9, 13, "Y"); ell(80, 37, 7, 11, "c"); dots(74, 28, 12, 18, "W", 5);
+    if (s.flags.mirrorSeen) { ell(80, 37, 4, 5, "w"); px(78, 36, "e"); px(82, 36, "e"); px(77, 38, "P"); px(83, 38, "P"); px(80, 40, "R"); R(75, 31, 2, 9, "h"); R(83, 31, 2, 9, "h"); }
+    R(96, 64, 32, 22, "B"); R(97, 65, 30, 20, "b"); R(96, 70, 32, 2, "Y"); R(95, 60, 34, 4, "B");
+    ell(102, 61, 3, 3, "g"); ell(110, 60, 3, 3, "h"); ell(120, 61, 3, 3, "g"); px(101, 60, "k"); px(103, 60, "k"); px(109, 59, "k"); px(111, 59, "k");
+    if (!s.flags.readNote) { R(114, 58, 6, 4, "w"); R(115, 59, 4, 1, "g"); }
+    door(132, 22, 26, 66, "w", "g", s.flags.nurseryOpen);
+    candleStick(30, 50); R(26, 55, 10, 2, "B");
+    R(16, 88, 6, 5, "R"); R(22, 90, 5, 5, "e"); R(18, 84, 5, 4, "y"); R(140, 92, 8, 4, "G");
+    vignette();
+  },
+  hall(s) {
+    damask("m", "r", 64); wainscot(62, "B", "b"); boards(68, "B", "q");
+    R(30, 68, 100, 32, "R"); R(32, 68, 96, 32, "r"); for (let i = 0; i < 32; i += 4) dots(34, 70 + i, 92, 1, "R", 4, i);
+    door(2, 26, 22, 60, "w", "g", false); R(6, 30, 14, 6, "P");
+    R(28, 16, 22, 70, "B"); R(30, 18, 18, 66, "b"); ell(39, 27, 8, 8, "Y"); ell(39, 27, 7, 7, "w");
+    for (let i = 0; i < 13; i++) { const a = i / 13 * Math.PI * 2 - Math.PI / 2; px(39 + Math.round(Math.cos(a) * 6), 27 + Math.round(Math.sin(a) * 6), "k"); }
+    line(39, 27, 39, 22, "k"); line(39, 27, 37, 22, "k"); R(32, 38, 14, 34, "B"); R(38, 38, 2, 26, "Y"); R(48, 30, 5, 2, "Y"); R(52, 29, 2, 4, "y");
+    const crook = !s.flags.gotRibbon;
+    for (let j = 0; j < 34; j++) { const o = crook ? Math.round(j / 12) : 0; R(56 + o, 10 + j, 28, 1, j < 2 || j > 31 ? "Y" : "y"); R(58 + o, 10 + j, 24, 1, j < 2 || j > 31 ? "y" : "d"); }
+    const o2 = crook ? 1 : 0;
+    R(64 + o2, 14, 12, 8, "k"); R(62 + o2, 21, 16, 2, "k"); px(66 + o2, 12, "s"); px(70 + o2, 11, "s"); px(74 + o2, 12, "s"); ell(70 + o2, 27, 5, 5, "w"); px(68 + o2, 26, "e"); px(72 + o2, 26, "e"); R(67 + o2, 30, 7, 1, "R"); R(63 + o2, 33, 14, 8, "m"); R(66 + o2, 33, 8, 1, "y");
+    R(62 + o2, 41, 16, 2, "Y");
+    if (crook) { R(83, 30, 3, 8, "P"); px(84, 31, "w"); px(84, 34, "w"); }
+    door(88, 26, 22, 58, "p", "d", s.flags.musicOpen); if (!s.flags.musicOpen) { for (const [a, b] of [[93, 34], [100, 40], [95, 50], [102, 62]]) { R(a, b, 1, 4, "w"); px(a + 1, b, "w"); ell(a - 1, b + 4, 1, 1, "w"); } R(103, 54, 2, 3, "Y"); }
+    door(114, 26, 22, 58, "b", "B", s.flags.sewOpen, "s"); if (!s.flags.sewOpen) { R(119, 52, 12, 8, "S"); R(121, 49, 8, 3, "s"); R(122, 50, 6, 2, "S"); px(121, 54, "R"); px(125, 54, "y"); px(129, 54, "w"); R(117, 32, 16, 6, "w"); dots(118, 34, 14, 1, "k", 2); }
+    R(138, 30, 22, 62, "q"); for (let i = 0; i < 6; i++) R(138 + i * 4, 30 + i * 10, 22 - i * 4, 10, i % 2 ? "B" : "b"); R(138, 28, 2, 64, "B"); for (let i = 0; i < 5; i++) R(140 + i * 4, 30 + i * 10, 1, 8, "g");
+    for (const cx of [26, 54, 86, 112]) { R(cx - 1, 18, 4, 2, "Y"); candleStick(cx, 12); }
+    vignette();
+  },
+  parlor(s) {
+    wallStripes("G", "n", 3, 60); wainscot(58, "B", "b"); boards(64, "B", "q");
+    R(60, 2, 40, 2, "Y"); line(80, 0, 80, 4, "Y"); for (const cx of [62, 72, 88, 98]) candleStick(cx, 4);
+    R(2, 16, 24, 70, "q"); for (let i = 0; i < 6; i++) R(2, 76 - i * 11, 24 - i * 3, 11, i % 2 ? "B" : "b"); R(24, 14, 2, 72, "B");
+    door(132, 20, 26, 68, "B", "q", false, "Y"); ell(145, 34, 5, 5, "S"); ell(145, 34, 4, 4, "c");
+    const cups = [["maribel", 30, "R"], ["theo", 54, "y"], ["hollis", 78, "W"]];
+    for (const [k, x] of cups) { R(x + 1, 58, 20, 14, "B"); R(x + 3, 46, 16, 14, "b"); spr("doll", x + 4, 40, DOLLS[k]); }
+    px(87, 52, "W"); px(89, 52, "W"); px(91, 52, "W");
+    R(102, 42, 24, 30, "B"); R(104, 44, 20, 24, "r"); dots(106, 46, 16, 20, "P", 4);
+    R(24, 66, 108, 14, "w"); R(24, 66, 108, 2, "t"); for (let i = 24; i < 132; i += 4) R(i, 80, 2, 2, "w"); R(28, 82, 2, 12, "B"); R(126, 82, 2, 12, "B");
+    for (const [, x, c] of cups) { R(x + 8, 63, 6, 4, "w"); R(x + 14, 64, 1, 2, "w"); px(x + 10, 64, c); px(x + 11, 64, c); R(x + 7, 67, 8, 1, "g"); }
+    R(110, 63, 6, 4, "w"); R(116, 64, 1, 2, "w"); R(109, 67, 8, 1, "g"); R(106, 70, 14, 5, "w"); dots(107, 72, 12, 1, "k", 2);
+    if (!s.flags.gotClef) { ell(69, 80, 10, 7, "P"); for (let i = -9; i <= 9; i += 3) R(69 + i, 74, 1, 13, "r"); R(68, 72, 3, 2, "L"); ell(74, 77, 2, 2, "L"); R(58, 86, 22, 2, "g"); }
+    else { ell(69, 81, 9, 6, "w"); R(60, 80, 18, 1, "e"); R(78, 79, 4, 2, "w"); R(56, 78, 4, 4, "w"); R(66, 74, 6, 2, "w"); R(58, 86, 22, 2, "g"); }
+    vignette();
+  },
+  music(s) {
+    wallStripes("v", "p", 5, 62); wainscot(60, "q", "p"); boards(66, "b", "B");
+    R(80, 8, 26, 26, "k"); R(78, 6, 30, 4, "Y"); for (let i = 0; i < 6; i++) { R(78 + i, 10, 2, 28 - i * 3, "R"); R(106 - i, 10, 2, 28 - i * 3, "R"); } R(78, 8, 30, 3, "R");
+    R(50, 12, 16, 20, "Y"); R(52, 14, 12, 16, "d"); ell(58, 21, 3, 4, "w"); R(55, 25, 7, 5, "P"); R(55, 17, 7, 2, "h");
+    R(28, 40, 46, 46, "B"); R(30, 42, 42, 18, "b"); R(30, 60, 42, 6, "w"); for (let i = 31; i < 72; i += 3) R(i, 60, 1, 6, "k"); for (let i = 32; i < 72; i += 6) R(i, 60, 2, 3, "k"); R(51, 60, 3, 6, "q"); R(28, 66, 46, 4, "B"); R(30, 70, 4, 16, "B"); R(68, 70, 4, 16, "B");
+    R(42, 44, 18, 12, "w"); dots(43, 46, 16, 9, "k", 3);
+    R(90, 58, 18, 28, "g"); R(88, 56, 22, 3, "t"); R(88, 84, 22, 3, "t"); R(94, 60, 2, 24, "t");
+    if (!s.flags.gotBox) { R(86, 48, 26, 10, "B"); R(87, 49, 24, 8, "b"); R(87, 51, 24, 1, "y"); px(110, 53, "k"); }
+    line(130, 66, 130, 40, "S"); line(124, 86, 130, 66, "S"); line(136, 86, 130, 66, "S"); R(118, 26, 24, 16, "w"); R(118, 42, 24, 2, "S"); dots(120, 29, 20, 11, "k", 4);
+    if (!s.flags.readDiary) R(126, 24, 8, 4, "y");
+    vignette();
+  },
+  kitchen(s) {
+    checker(0, "t", "g"); R(0, 60, 160, 3, "B"); checker(63, "k", "g");
+    R(28, 12, 24, 2, "B"); for (const hx of [32, 40, 48]) R(hx, 14, 1, 3, "S"); if (!s.flags.gotLadle) { line(40, 16, 40, 28, "s"); ell(40, 30, 3, 2, "S"); } R(32, 17, 2, 10, "s");
+    R(26, 56, 36, 38, "S"); R(26, 56, 36, 2, "s"); R(30, 70, 28, 20, "n"); R(31, 71, 26, 18, "k"); for (let i = 0; i < 4; i++) { ell(36 + i * 6, 80, 2, 2, "w"); px(35 + i * 6, 80, "k"); px(37 + i * 6, 80, "k"); } R(30, 70, 28, 2, "S");
+    R(30, 44, 28, 14, "S"); R(28, 44, 32, 2, "s"); R(31, 46, 26, 3, "P"); R(26, 48, 4, 2, "S"); R(58, 48, 4, 2, "S");
+    if (!s.flags.gotWind) px(45, 47, "y"); else line(52, 46, 58, 36, "s");
+    R(66, 30, 22, 26, "w"); R(66, 30, 22, 2, "t"); for (let i = 34; i < 54; i += 3) R(68, i, 18, 1, "g"); R(76, 29, 2, 2, "R");
+    R(96, 16, 26, 44, "B"); R(98, 18, 22, 18, "c"); R(98, 38, 22, 20, "b"); R(109, 18, 1, 40, "B"); for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { R(100 + i * 7, 20 + j * 8, 4, 6, "w"); px(101 + i * 7, 23 + j * 8, ["R", "e", "G"][i]); }
+    door(130, 22, 28, 66, "B", "q", s.flags.cellarOpen, "S"); if (!s.flags.cellarOpen) { R(130, 34, 28, 3, "S"); R(130, 70, 28, 3, "S"); R(140, 52, 8, 8, "S"); R(142, 49, 4, 3, "s"); px(144, 56, "k"); } else { for (let i = 0; i < 5; i++) R(134 + i * 2, 70 + i * 4, 18 - i * 3, 3, "S"); }
+    R(64, 60, 30, 3, "b"); R(70, 63, 2, 30, "B");
+    vignette();
+  },
+  sewing(s) {
+    wallStripes("t", "L", 2, 62); wainscot(60, "b", "g"); boards(66, "b", "B");
+    door(2, 20, 22, 68, "b", "B", false);
+    R(37, 64, 2, 20, "S"); R(30, 84, 16, 2, "S"); ell(38, 30, 7, 9, "P"); R(31, 36, 14, 26, "P"); R(29, 50, 18, 14, "P"); R(31, 44, 14, 2, "r"); dots(31, 62, 16, 2, "w", 2); R(36, 20, 4, 3, "g"); R(29, 36, 2, 6, "w"); R(45, 36, 2, 6, "w");
+    for (const [x, y, w, h] of [[54, 6, 10, 14], [66, 8, 9, 12], [77, 6, 9, 14], [58, 22, 14, 10]]) { R(x, y, w, h, "w"); R(x, y, 1, 1, "R"); dots(x + 1, y + 2, w - 2, h - 3, "g", 3); }
+    line(78, 10, 85, 18, "R"); line(85, 10, 78, 18, "R");
+    R(54, 64, 34, 4, "b"); R(56, 68, 2, 18, "B"); R(84, 68, 2, 18, "B"); for (let i = 0; i < 4; i++) { ell(60 + i * 8, 60, 3, 3, i % 2 ? "w" : "t"); R(58 + i * 8, 62, 5, 2, "g"); dots(58 + i * 8, 58, 5, 2, "W", 3); }
+    R(96, 30, 18, 2, "B"); R(104, 32, 2, 34, "B"); R(92, 18, 24, 12, "w"); R(103, 18, 2, 12, "g"); dots(94, 20, 8, 8, "k", 3); dots(107, 20, 8, 8, "k", 3); R(92, 29, 24, 1, "B"); if (!s.flags.readRitual) R(110, 16, 2, 6, "R");
+    shelfDolls(122, 8, 5, 1); shelfDolls(122, 24, 5, 3);
+    R(88, 78, 72, 4, "B"); R(88, 76, 72, 2, "b"); R(92, 82, 2, 12, "B"); R(154, 82, 2, 12, "B");
+    if (!s.flags.gotScissors) spr("scissors", 97, 64, null, 1);
+    ell(127, 70, 6, 5, "R"); R(126, 64, 2, 2, "G"); for (const [a, b] of [[123, 64], [126, 63], [130, 65]]) { R(a, b, 1, 4, "s"); px(a, b - 1, "y"); } if (!s.flags.gotNeedle) line(131, 60, 133, 68, "W");
+    if (!s.flags.gotThread) { R(143, 66, 12, 2, "b"); R(144, 68, 10, 7, "R"); R(143, 75, 12, 2, "b"); dots(144, 69, 10, 6, "r", 3); }
+    vignette();
+  },
+  cellar(s) {
+    R(0, 0, 160, 100, "n"); for (let y = 0, r = 0; y < 70; y += 7, r++) for (let x = (r % 2) * 6 - 6; x < 160; x += 12) { R(x, y, 11, 6, "S"); R(x, y, 11, 1, "s"); }
+    R(0, 70, 160, 30, "q"); dots(0, 72, 160, 28, "S", 3);
+    for (let i = 0; i < 6; i++) R(2, 8 + i * 9, 26 - i * 3, 9, i % 2 ? "S" : "s");
+    R(30, 22, 30, 2, "B"); R(30, 40, 30, 2, "B"); R(30, 52, 30, 2, "B");
+    for (let i = 0; i < 4; i++) for (const yy of [12, 30, 44]) { R(32 + i * 7, yy, 5, yy === 44 ? 8 : 10, "c"); px(33 + i * 7, yy + 3, ["e", "G", "h", "e"][i]); px(35 + i * 7, yy + 5, ["h", "e", "G", "e"][i]); }
+    R(108, 54, 46, 44, s.flags.passageOpen ? "k" : "B");
+    if (s.flags.passageOpen) { R(110, 58, 42, 40, "k"); ell(131, 92, 14, 6, "d"); for (let i = 0; i < 5; i++) R(118 + i * 2, 70 + i * 6, 26 - i * 4, 2, "q"); R(108, 54, 4, 44, "b"); dots(112, 58, 40, 30, "o", 9); }
+    else { for (let i = 0; i < 4; i++) { R(108, 56 + i * 10, 46, 2, "b"); for (let j = 0; j < 5; j++) R(111 + j * 9, 59 + i * 10, 4, 7, j % 2 ? "c" : "g"); } R(130, 54, 1, 44, "o"); }
+    line(121, 0, 121, 44, "R"); line(122, 0, 122, 44, "r"); R(119, 44, 6, 6, "y"); dots(119, 47, 6, 5, "Y", 2);
+    const slp = s.flags.keeperAsleep;
+    spr("doll", 64, 20, slp ? Object.assign({}, DOLLS.keeper, { E: "w", k: "w" }) : DOLLS.keeper, 3);
+    if (slp) { R(70, 37, 7, 1, "k"); R(82, 37, 7, 1, "k"); }
+    R(63, 85, 44, 2, "k");
+    vignette();
+  },
+  chamber(s) {
+    R(0, 0, 160, 100, "k"); ell(80, 40, 78, 50, "d"); for (let y = 2, r = 0; y < 76; y += 8, r++) for (let x = (r % 2) * 7; x < 160; x += 14) { R(x, y, 13, 7, "q"); R(x, y, 13, 1, "p"); }
+    R(0, 76, 160, 24, "d"); dots(0, 78, 160, 22, "q", 3);
+    R(2, 8, 22, 56, "k"); for (let i = 0; i < 5; i++) R(4, 58 - i * 10, 18 - i * 2, 3, "q");
+    if (s.flags.defeated) { R(128, 6, 30, 28, "s"); R(130, 8, 26, 26, "c"); dots(130, 8, 26, 26, "W", 3); ell(143, 34, 14, 3, "s"); }
+    else { R(128, 6, 30, 28, "q"); dots(130, 8, 26, 24, "k", 2); }
+    shelfDolls(28, 6, 3, 2); shelfDolls(100, 6, 3, 0);
+    ell(81, 88, 26, 8, "w"); ell(81, 88, 24, 6, "d"); R(76, 85, 10, 1, "w"); ell(81, 87, 2, 2, "w"); R(80, 89, 3, 4, "w");
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; candleStick(80 + Math.round(Math.cos(a) * 27), 82 + Math.round(Math.sin(a) * 8)); }
+    R(106, 70, 40, 12, "S"); R(106, 70, 40, 2, "s"); R(110, 82, 4, 14, "S"); R(138, 82, 4, 14, "S");
+    if (!s.flags.defeated) { spr("doll", 111, 26, DOLLS.you, 2); R(121, 52, 8, 2, "P"); ell(125, 48, 3, 2, "W"); px(125, 51, "W"); }
+    else { R(116, 66, 22, 4, "P"); dollMini(118, 52); }
+    if (!s.flags.defeated) dollMan(58, 4, s.flags.frozen, TIME);
+    ell(37, 93, 6, 4, "w"); for (let i = 0; i < 4; i++) R(32 + i * 3, 86 - (i % 3 ? 1 : 0), 2, 6, "w"); R(43, 90, 3, 2, "w"); R(28, 96, 18, 4, "P"); dots(28, 96, 18, 4, "w", 2); px(38, 93, "R");
+    if (!s.flags.free) { line(38, 93, 60, 91, "R"); line(60, 91, 80, 88, "R"); }
+    else { line(36, 96, 46, 97, "R"); line(70, 90, 80, 88, "R"); }
+    if (s.flags.defeated) R(0, 0, 160, 100, "rgba(20,12,20,0.25)");
+    vignette();
+  },
+  escape(s) {
+    const sky = ["v", "m", "r", "P", "L", "y"]; for (let i = 0; i < 6; i++) R(0, i * 9, 160, 9, sky[i]); ell(112, 54, 12, 12, "y"); ell(112, 54, 9, 9, "W");
+    R(0, 54, 160, 46, "G"); dots(0, 56, 160, 44, "n", 5); R(0, 54, 160, 2, "n");
+    R(10, 28, 48, 50, "m"); for (let j = 0; j < 20; j++) R(34 - j - 4, 8 + j, 2 * j + 8, 1, "p"); R(8, 28, 52, 2, "q");
+    for (const [x, y] of [[14, 34], [42, 34], [14, 52], [42, 52]]) { R(x, y, 10, 10, "w"); R(x + 1, y + 1, 8, 8, "y"); R(x + 5, y, 1, 10, "w"); R(x, y + 5, 10, 1, "w"); }
+    R(28, 58, 12, 20, "B"); R(30, 33, 8, 8, "w"); R(31, 34, 6, 6, "c"); px(33, 36, "P"); px(35, 36, "P");
+    R(62, 70, 34, 8, "G"); R(138, 70, 22, 8, "G"); dots(62, 70, 34, 8, "n", 3); dots(138, 70, 22, 8, "n", 3);
+    R(66, 86, 40, 14, "g"); R(96, 82, 44, 18, "g"); dots(66, 88, 74, 12, "t", 4);
+    R(94, 38, 2, 48, "k"); R(136, 38, 2, 48, "k");
+    if (!s.flags.gateOpen) { for (let i = 0; i < 9; i++) R(98 + i * 4, 44, 2, 42, "S"); R(96, 50, 40, 2, "S"); R(96, 76, 40, 2, "S"); ell(116, 64, 3, 4, "R"); line(112, 60, 120, 68, "R"); line(120, 60, 112, 68, "R"); }
+    else { for (let i = 0; i < 5; i++) R(96 + i, 44 + i, 2, 42 - i * 2, "S"); R(118, 60, 1, 6, "R"); }
+    vignette();
+  },
+};
+// animated bits drawn on top every frame
+function animate(s, t) {
+  const fl = a => (Math.sin(t * 13 + a) + Math.sin(t * 7.3 + a * 2)) > 0;
+  const flame = (x, y, a) => { px(x, y - 1, fl(a) ? "y" : "o"); px(x + (fl(a + 1) ? 1 : 0), y - 2, "o"); if (fl(a + 2)) px(x, y - 3, "y"); };
+  if (s.room === "nursery") flame(30, 50, 1);
+  if (s.room === "hall") [26, 54, 86, 112].forEach((cx, i) => flame(cx, 12, i));
+  if (s.room === "parlor") { [62, 72, 88, 98].forEach((cx, i) => flame(cx, 4, i)); if (Math.sin(t * 2) > 0) { px(112, 60, "W"); px(113, 58, "W"); } }
+  if (s.room === "music" && !s.flags.gotBox) { const d = Math.floor(t * 2) % 2; px(98, 44, "w"); R(97 + d, 45, 3, 2, "P"); px(98, 47, "w"); }
+  if (s.room === "kitchen") { const b = Math.floor(t * 4); for (let i = 0; i < 3; i++) px(34 + ((b + i * 7) % 22), 45 - ((b + i) % 3), "L"); }
+  if (s.room === "cellar" && s.flags.keeperAsleep && Math.floor(t) % 3 === 0) px(100, 26 - Math.floor(t * 4) % 6, "W");
+  if (s.room === "chamber") {
+    if (!s.flags.defeated) for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; flame(80 + Math.round(Math.cos(a) * 27), 82 + Math.round(Math.sin(a) * 8), i); }
+    if (s.flags.frozen && !s.flags.defeated) { const k = (t * 8) % 20; px(70 + k / 2, 10 - k / 4, "c"); px(92 - k / 3, 14 - k / 5, "c"); }
+  }
+}
+// title art (also the card picture)
+function paintTitle() {
+  R(0, 0, 160, 100, "n"); for (let i = 0; i < 46; i++) { const h = Math.abs(Math.sin(i * 12.9898) * 43758.5453); px(Math.floor(h % 160), Math.floor((h / 160) % 60), i % 3 ? "S" : "W"); }
+  ell(31, 25, 5, 5, "t"); ell(33, 23, 4, 4, "n");
+  R(0, 70, 160, 30, "q"); dots(0, 72, 160, 28, "d", 3);
+  const H = -8;
+  R(36 + H, 38, 56, 44, "p"); for (let j = 0; j < 22; j++) R(64 + H - j - 6, 16 + j, 2 * j + 12, 1, "d"); R(34 + H, 38, 60, 2, "k"); R(76 + H, 12, 6, 12, "d");
+  for (const [x, y, c] of [[42, 44, "y"], [56, 44, "o"], [72, 44, "y"], [42, 60, "y"], [72, 60, "y"], [58, 26, "o"]]) { R(x + H, y, 10, 10, "k"); R(x + H + 1, y + 1, 8, 8, c); R(x + H + 5, y + 1, 1, 8, "k"); R(x + H + 1, y + 5, 8, 1, "k"); }
+  ell(47 + H, 48, 1, 1, "k"); R(46 + H, 50, 3, 3, "k"); ell(77 + H, 64, 1, 1, "k"); R(76 + H, 66, 3, 2, "k");
+  R(57 + H, 62, 12, 20, "B"); R(66 + H, 72, 1, 2, "y");
+  dollMan(84, 22, false, 0.3);
+  for (let i = 0; i < 160; i += 7) { R(i, 80, 2, 8, "q"); px(i, 79, "p"); }
+}
+let titleBuf = null, endBuf = null;
+function titleArt() { if (!titleBuf) { titleBuf = mk(160, 100); g = titleBuf.getContext("2d"); paintTitle(); } return titleBuf; }
+const sceneBuf = mk(160, 100), animBuf = mk(160, 100);
+let sceneKey = "";
+function sceneImage(s, t) {
+  const live = s.room === "chamber" && !s.flags.defeated;           // he moves, so the chamber is painted every frame
+  const k = s.room + "|" + Object.keys(s.flags).sort().join(",");
+  if (live || k !== sceneKey) { g = sceneBuf.getContext("2d"); g.clearRect(0, 0, 160, 100); PAINT[s.room](s); sceneKey = live ? "" : k; }
+  g = animBuf.getContext("2d"); g.drawImage(sceneBuf, 0, 0);
+  animate(s, t);
+  return animBuf;
+}
+// big doll face for the mirror moment and the death screen
+function faceBuf(cracked) {
+  const b = mk(64, 64); g = b.getContext("2d");
+  ell(32, 30, 22, 26, "h"); for (const [x, y] of [[12, 40], [10, 50], [52, 40], [54, 50], [14, 30], [50, 30]]) ell(x, y, 4, 6, "h");
+  ell(32, 32, 16, 19, "w"); R(40, 16, 6, 30, "t");
+  for (const ex of [25, 39]) { ell(ex, 30, 5, 5, "k"); ell(ex, 30, 4, 4, cracked ? "s" : "e"); R(ex - 2, 28, 2, 2, "W"); }
+  R(19, 38, 4, 2, "P"); R(41, 38, 4, 2, "P"); R(29, 44, 7, 2, "R"); R(30, 46, 5, 1, "r");
+  R(10, 52, 44, 12, "w"); dots(10, 52, 44, 12, "L", 3); R(10, 52, 44, 1, "t");
+  if (cracked) { line(30, 13, 34, 24, "k"); line(34, 24, 30, 33, "k"); line(30, 33, 36, 46, "k"); line(34, 24, 40, 27, "k"); }
+  return b;
+}
+let FACE = null, CRACKED = null;
+
+// ================= SAVE (one stable key; the gallery lives there too) =================
+let SAVE = { v: 1, save: null, gallery: [], wins: 0 };
+try { const o = JSON.parse(localStorage.getItem(STORE) || "null"); if (o && o.v === 1) SAVE = Object.assign(SAVE, o); } catch (e) {}
+if (!Array.isArray(SAVE.gallery)) SAVE.gallery = [];
+function persist() { if (SWITCHED) return; try { localStorage.setItem(STORE, JSON.stringify(SAVE)); } catch (e) {} }
+function validState(s) { return !!(s && STORY.rooms[s.room] && s.flags && Array.isArray(s.inv) && Array.isArray(s.journal) && s.seen && s.looked); }
+if (SAVE.save && !validState(SAVE.save.st)) SAVE.save = null;
+
+// ================= GAME STATE =================
+let scene = "title", overlay = null, st = null, stats = null, tiers = {}, held = null, deathId = null, deathNew = false, endInfo = null;
+let msg = { text: "", pages: [[]], page: 0 }, toast = null, showSpotsT = 0, idleT = 0, nudge = null, fadeT = 0, mirrorT = 0, flashT = 0, seq = 0;
+let coin = null, lockDials = [3, 3, 3], journalPage = 0, galleryPick = -1, TIME = 0, ticks = 0, paused = false;
+const DEATH_IDS = Object.keys(STORY.deaths);
+function newGame() {
+  st = RU.init(STORY); stats = { hints: 0, deaths: 0, found: 0, t: 0 }; tiers = {}; held = null; lockDials = [3, 3, 3];
+  
+  scene = "play"; overlay = null; say(STORY.intro); fadeT = 0.6; save(); sfx("start");
+}
+function continueGame() {
+  const sv = SAVE.save; st = RU.clone(sv.st); stats = Object.assign({ hints: 0, deaths: 0, found: 0, t: 0 }, sv.stats); tiers = sv.tiers || {}; held = null;
+  scene = "play"; overlay = null; say("Welcome back. The house kept your place: " + STORY.rooms[st.room].name + "."); fadeT = 0.6; sfx("start");
+}
+function save() { if (scene === "play" && st) SAVE.save = { st, stats, tiers }; persist(); }
+function say(t) { msg.text = t || ""; msg.page = 0; paginate(); }
+function act(a) {
+  const r = RU.apply(STORY, st, a); seq++;
+  if (r.die) {                                     // a death never changes the state: REWIND puts you one step back
+    deathId = r.die; deathNew = !SAVE.gallery.includes(r.die);
+    if (deathNew) { SAVE.gallery.push(r.die); stats.found++; }
+    stats.deaths++; scene = "dead"; overlay = null; coin = null; held = null; flashT = 0.35; say(""); sfx("die"); save(); return r;
+  }
+  st = r.state;
+  const t = r.say || "";
+  if (r.clues.length) toast = { text: "JOURNAL +" + r.clues.length, t: 2.2 };
+  if (r.go) { fadeT = 0.45; held = null; }
+  if (r.fx === "mirror") mirrorT = 3.4;
+  if (r.fx === "lock") overlay = "lock";
+  if (r.fx === "defeat") flashT = 1.2;
+  if (r.sfx) sfx(r.sfx);
+  if (r.win) { scene = "end"; overlay = null; endInfo = { text: t, hints: stats.hints, deaths: stats.deaths, found: SAVE.gallery.length, t: stats.t }; SAVE.save = null; SAVE.wins = (SAVE.wins || 0) + 1; persist(); sfx("win"); return r; }
+  if (held && !st.inv.includes(held)) held = null;
+  say(t);
+  save();
+  return r;
+}
+function rewind() { scene = "play"; seq++; say((deathNew ? "Added to your Ways to Die. " : "") + "Rewound one step. Let's pretend that never happened."); deathId = null; save(); sfx("rewind"); }
+function hint() {
+  seq++;
+  const gl = RU.hintGoal(STORY, st);
+  if (!gl) { say("No hints needed. Walk out of here."); return; }
+  let tier = tiers[gl.id] || 0;
+  if (tier < 3) { tier++; tiers[gl.id] = tier; stats.hints++; }
+  say("HINT " + tier + "/3: " + gl.hints[tier - 1]); save(); sfx("hint");
+}
+
+// ================= LAYOUT (CSS px) =================
+const SAFE = 0.7;
+let cw = 0, ch = 0, L = 0, small = false, LY = { panel: null, sc: 1 };
+const DPR = () => Math.min(window.devicePixelRatio || 1, 3);
+function resize() {
+  if (!innerWidth || !innerHeight) return;               // frames can be 0x0 for a moment; try again next frame
+  cw = innerWidth; ch = innerHeight;
+  canvas.width = Math.round(cw * DPR()); canvas.height = Math.round(ch * DPR());
+  small = ch <= 300 || cw <= 360;
+  root.classList.toggle("card-small", small);
+  L = Math.floor(ch * SAFE);
+  const C = 48;
+  let fs, panel, sc, rows;
+  if (!small) { fs = cw >= 420 ? 1.5 : 1; sc = Math.min((cw - 2 * C) / 160, (L - 90) / 100); panel = { x: C, y: Math.round(100 * sc + 3), w: cw - 2 * C }; panel.h = L - panel.y - 1; rows = Math.floor((L - 48 + 2) / 46); }
+  else { fs = cw >= 300 ? 1.5 : 1; const py = 48 + 46 * 2; panel = { x: 2, y: py, w: cw - 4, h: L - py - 1 }; sc = Math.min((cw - 2 * C) / 160, (py - 4) / 100); rows = 2; }
+  const sw = 160 * sc, sh = 100 * sc;
+  LY = { C, fs, lineH: fs === 1 ? 8 : fs * 9, panel, sc, sx: Math.round((cw - sw) / 2), sy: 0, sw, sh, rows };
+  LY.lines = Math.max(1, Math.floor((panel.h - 6) / LY.lineH));
+  paginate();
+}
+function paginate() {
+  if (!LY.panel) return;
+  const lines = wrap(msg.text, LY.panel.w - 14, LY.fs);
+  msg.pages = []; for (let i = 0; i < lines.length; i += LY.lines) msg.pages.push(lines.slice(i, i + LY.lines));
+  if (!msg.pages.length) msg.pages = [[]];
+  msg.page = Math.min(msg.page, msg.pages.length - 1);
+}
+
+// ================= FONT =================
+let uiBottom = 0, trackUI = true;
+const gwid = c => { const f = FONT[c]; return f ? f.split("/")[0].length : 3; };
+function tw(s, fs) { let w = 0; for (const c of String(s).toUpperCase()) w += c === " " ? 4 : gwid(c) + 1; return Math.max(0, w - 1) * fs; }
+function wrap(s, maxW, fs) {
+  const words = String(s).toUpperCase().split(/\s+/).filter(Boolean), out = []; let cur = "";
+  for (const w of words) { const t = cur ? cur + " " + w : w; if (tw(t, fs) <= maxW || !cur) cur = t; else { out.push(cur); cur = w; } }
+  if (cur) out.push(cur); return out;
+}
+function text(s, x, y, color, fs = 1, align = "l") {
+  s = String(s).toUpperCase(); const W = tw(s, fs);
+  if (align === "c") x -= W / 2; else if (align === "r") x -= W;
+  ctx.fillStyle = col(color); ctx.beginPath(); let cx = x;
+  for (const c of s) {
+    if (c === " ") { cx += 4 * fs; continue; }
+    const f = FONT[c]; if (!f) { cx += 4 * fs; continue; }
+    const rows = f.split("/");
+    for (let j = 0; j < rows.length; j++) for (let i = 0; i < rows[j].length; i++) if (rows[j][i] === "#") ctx.rect(cx + i * fs, y + j * fs, fs, fs);
+    cx += (rows[0].length + 1) * fs;
+  }
+  ctx.fill();
+  if (trackUI) uiBottom = Math.max(uiBottom, y + 7 * fs + 1);
+  return W;
+}
+function shadowText(s, x, y, c, fs, al, sh = "k") { const o = Math.max(1, Math.round(fs / 1.5)); text(s, x + o, y + o, sh, fs, al); return text(s, x, y, c, fs, al); }
+
+// ================= DRAW HELPERS (main canvas, CSS px) =================
+let btns = [];
+function box(x, y, w, h, fill, edge) { ctx.fillStyle = col("k"); ctx.fillRect(x - 1, y - 1, w + 2, h + 2); ctx.fillStyle = col(edge); ctx.fillRect(x, y, w, h); ctx.fillStyle = col(fill); ctx.fillRect(x + 2, y + 2, w - 4, h - 4); if (trackUI) uiBottom = Math.max(uiBottom, y + h + 1); }
+function button(id, x, y, w, h, o = {}) {
+  btns.push({ id, x, y, w, h });
+  box(x, y, w, h, o.fill || (o.on ? "p" : "d"), o.on ? "y" : (o.edge || "m"));
+  if (o.icon) { const s = Math.max(1, Math.floor(Math.min(w, h - (o.label ? 10 : 0)) / 14)), iw = SPR[o.icon][0].length * s, ih = SPR[o.icon].length * s; spr(o.icon, Math.round(x + (w - iw) / 2), Math.round(y + (h - ih - (o.label ? 9 : 0)) / 2), o.swap, s, ctx); }
+  if (o.label) { const fs = o.fs || (tw(o.label, 1.5) <= w - 8 && h >= 30 ? 1.5 : 1); text(o.label, x + w / 2, o.icon ? y + h - 9 * fs + 1 : y + (h - 7 * fs) / 2, o.labelColor || "w", fs, "c"); }
+  if (o.badge) { ctx.fillStyle = col("R"); ctx.fillRect(x + w - 10, y + 2, 8, 8); }
+}
+function spotRect(h) { return { x: LY.sx + h.x * LY.sc, y: LY.sy + h.y * LY.sc, w: h.w * LY.sc, h: h.h * LY.sc }; }
+function inSceneRect(x, y) { return x >= LY.sx && x < LY.sx + LY.sw && y >= LY.sy && y < LY.sy + LY.sh; }
+
+// ================= DRAW =================
+function drawBackdrop() {
+  ctx.fillStyle = col("k"); ctx.fillRect(0, 0, cw, ch);
+  ctx.fillStyle = col("d"); for (let y = 0; y < ch; y += 12) for (let x = ((y / 12) % 2) * 6; x < cw; x += 12) ctx.fillRect(x, y, 2, 2);
+}
+function drawDecor() {   // bottom 30%: decoration only (X may cover it), never text or buttons. Your stitched arm = the story timer.
+  const y0 = L + 2;
+  ctx.fillStyle = col("q"); ctx.fillRect(0, y0, cw, ch - y0);
+  ctx.fillStyle = col("d"); for (let x = 0; x < cw; x += 16) ctx.fillRect(x, y0, 8, ch - y0);
+  ctx.fillStyle = col("B"); ctx.fillRect(0, y0, cw, 3);
+  if (!st) return;
+  const ay = y0 + Math.min(40, (ch - y0) * 0.45), aw = cw * 0.62, ah = Math.max(6, Math.min(16, (ch - y0) * 0.22));
+  ctx.fillStyle = col("w"); ctx.fillRect(-4, ay, aw, ah); ctx.fillStyle = col("t"); ctx.fillRect(-4, ay + ah - 3, aw, 3);
+  ctx.fillStyle = col("P"); ctx.fillRect(aw - 6, ay - 3, 12, ah + 6); ctx.fillStyle = col("w"); for (let i = 0; i < ah + 6; i += 3) ctx.fillRect(aw + 6, ay - 3 + i, 3, 2);
+  const n = st.flags.free ? 0 : st.stage * 4;
+  ctx.fillStyle = col("R"); for (let i = 0; i < n; i++) { const x = aw - 18 - i * (aw / 18); ctx.fillRect(x, ay + 2, 2, ah - 4); ctx.fillRect(x - 3, ay + ah / 2 - 1, 8, 2); }
+}
+function drawPlay() {
+  const img = sceneImage(st, TIME);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, LY.sx, LY.sy, LY.sw, LY.sh);
+  if (mirrorT > 0) {
+    if (!FACE) FACE = faceBuf(false);
+    const s = Math.min(LY.sw, LY.sh) * 0.9, cx = LY.sx + LY.sw / 2, cy = LY.sy + LY.sh / 2;
+    ctx.fillStyle = "rgba(20,12,20,0.8)"; ctx.fillRect(LY.sx, LY.sy, LY.sw, LY.sh);
+    ctx.fillStyle = col("Y"); ctx.beginPath(); ctx.ellipse(cx, cy, s * 0.44, s * 0.5, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = col("c"); ctx.beginPath(); ctx.ellipse(cx, cy, s * 0.4, s * 0.46, 0, 0, 7); ctx.fill();
+    ctx.drawImage(FACE, cx - s * 0.36, cy - s * 0.4, s * 0.72, s * 0.8);
+  }
+  const vis = RU.hotspots(STORY, st);
+  if (showSpotsT > 0 || nudge) {
+    for (const h of vis) {
+      if (RU.isQuiet(STORY, st, h) || (showSpotsT <= 0 && nudge !== h.id)) continue;      // used-up spots go quiet
+      const r = spotRect(h), a = showSpotsT > 0 ? Math.min(1, showSpotsT) : 0.5 + 0.4 * Math.sin(TIME * 8);
+      ctx.strokeStyle = `rgba(240,204,116,${a.toFixed(2)})`; ctx.lineWidth = 2; ctx.setLineDash([4, 3]); ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2); ctx.setLineDash([]);
+    }
+  }
+  if (fadeT > 0) { ctx.fillStyle = `rgba(20,12,20,${Math.min(1, fadeT * 2).toFixed(2)})`; ctx.fillRect(LY.sx, LY.sy, LY.sw, LY.sh); }
+  ctx.strokeStyle = col("B"); ctx.lineWidth = 2; ctx.strokeRect(LY.sx - 1, LY.sy - 1, LY.sw + 2, LY.sh + 2);
+  const colY = i => 48 + 46 * i;
+  const left = small ? ["hint", "journal"] : ["hint", "journal", "eye", "menu"];
+  const icons = { hint: "i_hint", journal: "i_journal", eye: "i_eye", menu: "i_house" };
+  left.forEach((id, i) => { if (colY(i) + 44 <= L) button(id, 2, colY(i), 44, 44, { icon: icons[id], on: id === "eye" && showSpotsT > 0, badge: id === "journal" && toast && toast.t > 0 }); });
+  const inv = st.inv;
+  if (small) {
+    button("eye", cw - 46, colY(0), 44, 44, { icon: "i_eye", on: showSpotsT > 0 });
+    const hi = held && inv.includes(held);
+    button("bag", cw - 46, colY(1), 44, 44, { icon: hi ? held : "i_bag", on: hi, badge: !hi && inv.length > 0 && false });
+  } else {
+    const n = LY.rows, showAll = inv.length <= n, list = showAll ? inv : inv.slice(0, n - 1);
+    list.forEach((it, i) => button("inv:" + it, cw - 46, colY(i), 44, 44, { icon: it, on: held === it }));
+    if (!showAll) button("bag", cw - 46, colY(n - 1), 44, 44, { icon: "i_bag", on: !!held && !list.includes(held) });
+  }
+  drawPanel();
+  if (toast && toast.t > 0) { const w = tw(toast.text, 1) + 10, tx = LY.sx + LY.sw - w - 4; box(tx, LY.sy + 4, w, 14, "p", "y"); text(toast.text, tx + 5, LY.sy + 8, "y", 1); }
+  if (overlay === "coin") drawCoin(); else if (overlay === "bag") drawBag(); else if (overlay === "journal") drawJournal(); else if (overlay === "gallery") drawGallery(); else if (overlay === "lock") drawLock();
+}
+function drawPanel() {
+  const P = LY.panel; box(P.x, P.y, P.w, P.h, "d", "m");
+  const lines = msg.pages[msg.page] || [];
+  if (!lines.length) { text(STORY.rooms[st.room].name, P.x + P.w / 2, P.y + (P.h - 7 * LY.fs) / 2, "P", LY.fs, "c"); return; }
+  lines.forEach((l, i) => text(l, P.x + 7, P.y + 5 + i * LY.lineH, msg.text.startsWith("HINT") ? "y" : "w", LY.fs));
+  if (msg.page < msg.pages.length - 1 && Math.sin(TIME * 6) > -0.3) { const x = P.x + P.w - 12, y = P.y + P.h - 9; ctx.fillStyle = col("y"); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 8, y); ctx.lineTo(x + 4, y + 5); ctx.fill(); }
+}
+function drawCoin() {
+  const bw = 44, gap = 6, W = 3 * bw + 2 * gap;
+  const x = Math.round(Math.min(Math.max(LY.sx + 4, coin.x - W / 2), LY.sx + LY.sw - W - 4)), y = Math.round(Math.min(Math.max(8, coin.y - 22), L - 44 - 16));
+  box(x - 6, y - 6, W + 12, 44 + 22, "q", "y");
+  [["look", "i_eye"], ["use", "i_hand"], ["talk", "i_mouth"]].forEach(([v, ic], i) => { button("verb:" + v, x + i * (bw + gap), y, bw, 44, { icon: ic }); text(v.toUpperCase(), x + i * (bw + gap) + bw / 2, y + 47, "y", 1, "c"); });
+}
+function drawBag() {
+  const inv = st.inv, cols = Math.max(2, Math.min(inv.length || 1, Math.floor((cw - 40) / 50))), rows = Math.ceil(inv.length / cols) || 1;
+  const W = Math.max(cols * 50 + 10, 160), H = rows * 50 + 52, x = Math.round((cw - W) / 2), y = Math.max(4, Math.min(48, L - H - 2));
+  box(x, y, W, H, "q", "y"); text("YOUR BAG", x + 8, y + 8, "y", 1);
+  inv.forEach((it, i) => button("bag:" + it, x + 5 + (i % cols) * 50, y + 48 + Math.floor(i / cols) * 50 - 2, 44, 44, { icon: it, on: held === it }));
+  if (!inv.length) text("EMPTY", x + W / 2, y + 60, "w", 1, "c");
+  button("close", x + W - 48, y + 2, 44, 40, { label: "X" });
+}
+function overlayBox(top) { const x = small ? 4 : LY.C, w = cw - 2 * x, y = top != null ? top : small ? 48 : 4, h = L - y - 2; box(x, y, w, h, "q", "y"); return { x, y, w, h }; }
+function drawJournal() {
+  const B = overlayBox(), fs = small ? 1 : LY.fs, lh = fs === 1 ? 8 : fs * 9;
+  text("JOURNAL", B.x + 8, B.y + 8, "y", fs);
+  const lines = []; for (const c of st.journal) lines.push(...wrap("- " + STORY.clues[c], B.w - 16, fs));
+  if (!lines.length) lines.push("NOTHING YET. LOOK AROUND.");
+  const per = Math.max(1, Math.floor((B.h - 22 - 52) / lh)), pages = Math.max(1, Math.ceil(lines.length / per));
+  journalPage = Math.min(journalPage, pages - 1);
+  lines.slice(journalPage * per, journalPage * per + per).forEach((l, i) => text(l, B.x + 8, B.y + 22 + i * lh, "w", fs));
+  const by = B.y + B.h - 48, ids = [["close", "BACK"], ["jprev", "<"], ["jnext", ">"], ["gallery", "DEATHS"], ["menu", "TITLE"]];
+  const bw = Math.floor((B.w - 8 - (ids.length - 1) * 4) / ids.length);
+  ids.forEach(([id, lab], i) => button(id, B.x + 4 + i * (bw + 4), by, bw, 44, { label: lab, fs: 1, on: (id === "jprev" && journalPage > 0) || (id === "jnext" && journalPage < pages - 1) }));
+  text((journalPage + 1) + "/" + pages, B.x + B.w - 8, B.y + 8, "P", 1, "r");
+}
+function drawGallery() {
+  btns = [];                                   // modal: only the gallery's own buttons work under it
+  const B = overlayBox(4), n = DEATH_IDS.length, cols = 4, bs = Math.max(44, Math.min(64, Math.floor((B.w - 16 - 3 * 6) / 4))), bh = 44;
+  text("WAYS TO DIE " + SAVE.gallery.length + "/" + n, small ? cw / 2 : B.x + 8, B.y + 8, "y", small ? 1 : 1.5, small ? "c" : "l");
+  const gx = B.x + Math.round((B.w - (cols * bs + 3 * 6)) / 2), gy = B.y + 22;
+  DEATH_IDS.forEach((d, i) => { const found = SAVE.gallery.includes(d); button("death:" + d, gx + (i % cols) * (bs + 6), gy + Math.floor(i / cols) * (bh + 6), bs, bh, found ? { icon: "i_skull", on: galleryPick === i } : { label: "?", fill: "k", on: galleryPick === i }); });
+  const ty = gy + 2 * (bh + 6) + 2, room = Math.floor((B.y + B.h - 50 - ty) / 8);
+  if (galleryPick >= 0) { const d = DEATH_IDS[galleryPick], D = STORY.deaths[d], found = SAVE.gallery.includes(d);
+    wrap(found ? (galleryPick + 1) + ". " + D.name + " (" + STORY.rooms[D.room].name + ")" : "???. Somewhere in " + STORY.rooms[D.room].name + ".", B.w - 16, 1).slice(0, room).forEach((s, i) => text(s, B.x + 8, ty + i * 8, found ? "w" : "P", 1)); }
+  else if (room > 0) text("TAP ONE", B.x + 8, ty, "P", 1);
+  const w = Math.min(120, B.w - 8); button("close", B.x + B.w - 4 - w, B.y + B.h - 48, w, 44, { label: "BACK" });
+}
+function drawLock() {
+  const B = overlayBox(), ds = Math.max(44, Math.min(60, Math.floor((B.w - 40) / 3), B.h - 100)), gx = B.x + Math.round((B.w - (3 * ds + 20)) / 2), dy = B.y + 22;
+  text("WORKSHOP LOCK", B.x + B.w / 2, B.y + 8, "y", small ? 1 : 1.5, "c");
+  for (let i = 0; i < 3; i++) button("dial" + i, gx + i * (ds + 10), dy, ds, ds, { icon: STORY.symbols[lockDials[i]], fill: "d" });
+  if (dy + ds + 14 < B.y + B.h - 48) text("TAP A DIAL TO TURN IT", B.x + B.w / 2, dy + ds + 5, "P", 1, "c");
+  button("close", B.x + B.w / 2 - 60, B.y + B.h - 48, 120, 44, { label: "BACK" });
+}
+function drawTitle() {
+  const img = titleArt(), s = Math.max(cw / 160, ch / 100);
+  ctx.imageSmoothingEnabled = false; ctx.drawImage(img, Math.round((cw - 160 * s) / 2), 0, 160 * s, 100 * s);
+  const fs = cw >= 420 ? 4 : cw >= 300 ? 3 : 2, ty = Math.round(ch * 0.1);
+  shadowText("THE DOLL MAN", cw / 2, ty, "L", fs, "c", "R");
+  shadowText("A DOLLHOUSE HORROR ADVENTURE", cw / 2, ty + 8 * fs + 4, "P", fs >= 3 ? 1.5 : 1, "c");
+  if (CARD) { const w = tw("PLAY IT RIGHT HERE IN THE POST", 2) + 24, y = Math.round(ch * 0.86); box(Math.round(cw / 2 - w / 2), y - 8, w, 30, "q", "y"); text("PLAY IT RIGHT HERE IN THE POST", cw / 2, y, "y", 2, "c"); return; }
+  const bw = Math.min(220, cw - 100), x = Math.round((cw - bw) / 2);
+  let y = small ? 94 : Math.round(L * 0.58);
+  if (SAVE.save) { button("cont", x, y, bw, 44, { label: "CONTINUE", on: true }); y += 50; button("new", x, y, bw, 44, { label: "NEW GAME" }); }
+  else button("new", x, y, bw, 44, { label: "NEW GAME", on: true });
+  button("gallery", 2, 48, 44, 44, { icon: "i_skull" });
+}
+function drawConfirm() {
+  drawTitle(); btns = [];
+  ctx.fillStyle = "rgba(20,12,20,0.8)"; ctx.fillRect(0, 0, cw, ch);
+  const w = Math.min(320, cw - 20), x = Math.round((cw - w) / 2), y = small ? 48 : 90, fs = small ? 1 : 1.5;
+  box(x, y, w, L - y - 4, "q", "y");
+  wrap("Start over? Your saved game will be lost. Your Ways to Die gallery is kept.", w - 16, fs).forEach((l, i) => text(l, x + 8, y + 8 + i * (fs === 1 ? 8 : fs * 9), "w", fs));
+  const by = L - 4 - 50, bw = Math.floor((w - 12) / 2);
+  button("yes", x + 4, by, bw, 44, { label: "START OVER", fs: 1 }); button("no", x + 8 + bw, by, bw, 44, { label: "KEEP MY GAME", on: true, fs: 1 });
+}
+function drawDead() {
+  drawPlay(); btns = [];
+  ctx.fillStyle = "rgba(60,10,20,0.88)"; ctx.fillRect(0, 0, cw, ch);
+  if (!CRACKED) CRACKED = faceBuf(true);
+  const D = STORY.deaths[deathId], n = DEATH_IDS.indexOf(deathId) + 1;
+  const fs = small ? 1 : 1.5, lh = fs === 1 ? 8 : fs * 9, w = cw - 24;
+  const fsz = small ? 40 : 96; ctx.drawImage(CRACKED, cw / 2 - fsz / 2, 6, fsz, fsz);
+  let y = 8 + fsz;
+  shadowText("DEATH " + n + "/" + DEATH_IDS.length + ": " + D.name, cw / 2, y, "L", small ? 1 : 2, "c", "R"); y += small ? 11 : 22;
+  const top = L - 48 - (deathNew ? 12 : 2), lines = wrap(D.say, w, fs), room = Math.floor((top - y) / lh);
+  lines.slice(0, Math.max(0, room)).forEach((l, i) => text(l, 12, y + i * lh, "w", fs));
+  if (deathNew) text("NEW! ADDED TO YOUR WAYS TO DIE", cw / 2, L - 48 - 10, "y", 1, "c");
+  button("rewind", Math.round(cw / 2 - 70), L - 46, 140, 44, { label: "REWIND", on: true });
+}
+function drawEnd() {
+  const s = Math.max(cw / 160, ch / 100 * 0.62);
+  if (!endBuf) { endBuf = mk(160, 100); g = endBuf.getContext("2d"); PAINT.escape({ flags: { gateOpen: true }, inv: [] }); }
+  ctx.imageSmoothingEnabled = false; ctx.drawImage(endBuf, Math.round((cw - 160 * s) / 2), 0, 160 * s, 100 * s);
+  ctx.fillStyle = col("G"); ctx.fillRect(0, 100 * s - 1, cw, ch);
+  const B = { x: small ? 6 : 40, y: small ? 48 : 30 }; B.w = cw - 2 * B.x; B.h = L - B.y - 4;
+  box(B.x, B.y, B.w, B.h, "q", "y");
+  const fs = small ? 1 : 1.5, lh = fs === 1 ? 8 : fs * 9;
+  let y = B.y + 8;
+  shadowText("YOU ESCAPED!", cw / 2, y, "y", small ? 2 : 3, "c", "R"); y += small ? 18 : 30;
+  const E = endInfo || { hints: 0, deaths: 0, found: 0, t: 0 }, mm = Math.floor(E.t / 60), ss = String(Math.floor(E.t % 60)).padStart(2, "0");
+  for (const l of ["HINTS USED: " + E.hints, "WAYS TO DIE FOUND: " + E.found + "/" + DEATH_IDS.length, "DEATHS THIS TIME: " + E.deaths, "TIME: " + mm + ":" + ss]) { text(l, B.x + 10, y, "w", fs); y += lh; }
+  const rest = wrap(E.text || "", B.w - 20, fs), room = Math.floor((B.y + B.h - 52 - y - 2) / lh);
+  rest.slice(0, Math.max(0, room)).forEach((l, i) => text(l, B.x + 10, y + 2 + i * lh, "P", fs));
+  const bw = Math.floor((B.w - 12) / 2), by = B.y + B.h - 48;
+  button("again", B.x + 4, by, bw, 44, { label: "PLAY AGAIN", on: true, fs: small ? 1 : 1.5 }); button("gallery", B.x + 8 + bw, by, bw, 44, { label: "DEATHS " + SAVE.gallery.length + "/" + DEATH_IDS.length, fs: small ? 1 : 1.5 });
+  if (overlay === "gallery") drawGallery();
+}
+function draw() {
+  btns = []; uiBottom = 0; trackUI = true;
+  const d = DPR(); ctx.setTransform(d, 0, 0, d, 0, 0); ctx.imageSmoothingEnabled = false;
+  drawBackdrop();
+  if (scene === "title") { drawTitle(); if (overlay === "gallery") drawGallery(); }
+  else if (scene === "confirm") drawConfirm();
+  else if (scene === "play") drawPlay();
+  else if (scene === "dead") drawDead();
+  else if (scene === "end") drawEnd();
+  trackUI = false;
+  if (scene === "play" || scene === "dead") drawDecor();
+  if (flashT > 0) { ctx.fillStyle = scene === "dead" ? `rgba(192,48,64,${Math.min(1, flashT * 2).toFixed(2)})` : `rgba(255,255,255,${Math.min(1, flashT).toFixed(2)})`; ctx.fillRect(0, 0, cw, ch); }
+  if (paused) { ctx.fillStyle = "rgba(20,12,20,0.6)"; ctx.fillRect(0, 0, cw, L); text("PAUSED", cw / 2, L / 2, "w", 2, "c"); }
+}
+
+// ================= SOUND (nothing at all until the first tap) =================
+let muted = false;
+try { muted = localStorage.getItem(MUTE_KEY) === "1"; } catch (e) {}
+let music = null, ac = null, master = null, soundOn = false;
+const muteBtn = document.getElementById("mute");
+function showMute() { muteBtn.textContent = muted ? "🔇" : "🔊"; muteBtn.setAttribute("aria-pressed", String(muted)); muteBtn.setAttribute("aria-label", muted ? "Turn sound on" : "Turn sound off"); }
+showMute();
+function startSound() {                 // runs INSIDE a tap (pointerup / touchend / click / key)
+  if (CARD) return;
+  if (soundOn) { if (music && music.paused && !document.hidden) music.play().catch(() => {}); return; }
+  soundOn = true;
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+  music = new Audio("music.wav?v=1"); music.loop = true; music.volume = 0.35; music.muted = muted; music.setAttribute("playsinline", "");
+  music.play().catch(() => {});
+  try { ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.gain.value = muted ? 0 : 0.5; master.connect(ac.destination); ac.resume(); } catch (e) { ac = null; }
+}
+function setMuted(m) {
+  muted = m; try { localStorage.setItem(MUTE_KEY, m ? "1" : "0"); } catch (e) {}
+  if (music) music.muted = m; if (master) master.gain.value = m ? 0 : 0.5; showMute();
+}
+function tone(f1, f2, len, type, vol, delay = 0) {
+  const t = ac.currentTime + delay, o = ac.createOscillator(), gn = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f2), t + len);
+  gn.gain.setValueAtTime(vol, t); gn.gain.exponentialRampToValueAtTime(0.001, t + len);
+  o.connect(gn); gn.connect(master); o.start(t); o.stop(t + len + 0.02);
+}
+const LULL = [659, 784, 880, 784, 659, 587, 523, 587, 659];      // Wren's lullaby (original)
+function sfx(name) {
+  if (!ac || muted || paused) return;
+  try {
+    if (name === "unlock") { tone(1200, 900, 0.04, "square", 0.05); tone(700, 500, 0.06, "square", 0.05, 0.06); }
+    else if (name === "get") { tone(988, 988, 0.12, "sine", 0.08); tone(1319, 1319, 0.2, "sine", 0.07, 0.1); }
+    else if (name === "door") tone(140, 90, 0.4, "sawtooth", 0.04);
+    else if (name === "lullaby") LULL.forEach((f, i) => tone(f * 2, f * 2, 0.5, "sine", 0.06, i * 0.22));
+    else if (name === "sting") { tone(1661, 1500, 0.6, "triangle", 0.06); tone(1760, 1700, 0.6, "triangle", 0.05); }
+    else if (name === "die") { tone(392, 98, 0.9, "sawtooth", 0.08); tone(415, 104, 0.9, "square", 0.04); }
+    else if (name === "rewind") [440, 523, 659, 880].forEach((f, i) => tone(f, f, 0.08, "triangle", 0.05, i * 0.06));
+    else if (name === "snip") { tone(3000, 1500, 0.03, "square", 0.04); tone(3200, 1600, 0.03, "square", 0.04, 0.07); }
+    else if (name === "hint") tone(1047, 1319, 0.15, "sine", 0.05);
+    else if (name === "tap") tone(660, 640, 0.03, "triangle", 0.03);
+    else if (name === "start") LULL.slice(0, 3).forEach((f, i) => tone(f, f, 0.3, "sine", 0.05, i * 0.18));
+    else if (name === "win") [523, 659, 784, 1046, 1319].forEach((f, i) => tone(f, f, 0.3, "sine", 0.07, i * 0.14));
+  } catch (e) {}
+}
+for (const type of ["pointerup", "touchend", "click", "keydown"])
+  addEventListener(type, e => { if (e.target !== muteBtn) startSound(); }, { capture: true, passive: true });
+muteBtn.addEventListener("click", () => { if (!soundOn) { setMuted(false); startSound(); } else setMuted(!muted); });
+
+// ================= INPUT: smart tap, long-press verb coin, item-then-target =================
+let down = null;
+canvas.addEventListener("pointerdown", e => {
+  e.preventDefault(); canvas.focus({ preventScroll: true });
+  const d = down = { x: e.clientX, y: e.clientY, id: e.pointerId, long: false, moved: false };
+  if (e.button === 2) { d.long = true; longPress(d.x, d.y); return; }
+  d.timer = setTimeout(() => { if (down === d && !d.moved) { d.long = true; longPress(d.x, d.y); } }, 420);
+});
+canvas.addEventListener("pointermove", e => { if (down && e.pointerId === down.id && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 14) down.moved = true; });
+function pointerEnd(e, cancel) {
+  if (!down || down.id !== e.pointerId) return;
+  clearTimeout(down.timer); const d = down; down = null;
+  if (cancel || d.long || d.moved) return;
+  tap(e.clientX, e.clientY);
+}
+canvas.addEventListener("pointerup", e => pointerEnd(e, false));
+canvas.addEventListener("pointercancel", e => pointerEnd(e, true));
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+const hitBtn = (x, y) => { for (let i = btns.length - 1; i >= 0; i--) { const q = btns[i]; if (x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h) return q; } return null; };
+function hitSpot(x, y) { if (!st || !inSceneRect(x, y)) return null; const vis = RU.hotspots(STORY, st); for (let i = vis.length - 1; i >= 0; i--) { const r = spotRect(vis[i]); if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return vis[i]; } return null; }
+function longPress(x, y) {
+  if (scene !== "play" || overlay || mirrorT > 0) return;
+  const h = hitSpot(x, y); if (!h) return;
+  coin = { x, y, spot: h.id }; overlay = "coin"; held = null; seq++; say("Look, use or talk: " + h.name + "?"); sfx("tap");
+}
+function tap(x, y) {
+  idleT = 0; nudge = null;
+  const b = hitBtn(x, y);
+  if (scene === "title") {
+    if (overlay === "gallery") { if (b) galleryBtn(b.id); return; }
+    if (!b) return; seq++;
+    if (b.id === "cont") continueGame();
+    else if (b.id === "new") { if (SAVE.save) scene = "confirm"; else newGame(); }
+    else if (b.id === "gallery") { overlay = "gallery"; galleryPick = -1; }
+    return;
+  }
+  if (scene === "confirm") { if (!b) return; seq++; if (b.id === "yes") { SAVE.save = null; newGame(); } else if (b.id === "no") scene = "title"; return; }
+  if (scene === "dead") { if (b && b.id === "rewind" && flashT <= 0.2) rewind(); return; }
+  if (scene === "end") {
+    if (overlay === "gallery") { if (b) galleryBtn(b.id); return; }
+    if (!b) return; seq++;
+    if (b.id === "again") newGame(); else if (b.id === "gallery") { overlay = "gallery"; galleryPick = -1; }
+    return;
+  }
+  // ---- play
+  if (mirrorT > 0) { if (mirrorT < 3.0) { mirrorT = 0; seq++; } return; }
+  if (overlay === "coin") { seq++; const c = coin; overlay = null; coin = null; if (b && b.id.startsWith("verb:")) act({ verb: b.id.slice(5), spot: c.spot }); else say(""); return; }
+  if (overlay === "bag") { seq++; if (!b || b.id === "close") { overlay = null; return; } if (b.id.startsWith("bag:")) { overlay = null; pickItem(b.id.slice(4)); } return; }
+  if (overlay === "journal") { if (!b) return; seq++;
+    if (b.id === "close") overlay = null; else if (b.id === "jprev") journalPage = Math.max(0, journalPage - 1); else if (b.id === "jnext") journalPage++;
+    else if (b.id === "gallery") { overlay = "gallery"; galleryPick = -1; } else if (b.id === "menu") { overlay = null; save(); scene = "title"; }
+    return; }
+  if (overlay === "gallery") { if (b) galleryBtn(b.id); return; }
+  if (overlay === "lock") { if (!b) return; seq++;
+    if (b.id === "close") { overlay = null; return; }
+    if (/^dial[0-2]$/.test(b.id)) { const i = +b.id[4]; lockDials[i] = (lockDials[i] + 1) % 5; sfx("tap");
+      const v = lockDials.map(k => STORY.symbols[k]).join("-");
+      if (RU.apply(STORY, st, { verb: "code", spot: "sewDoor", value: v }).changed) { overlay = null; act({ verb: "code", spot: "sewDoor", value: v }); } }
+    return; }
+  if (b) { seq++; press(b.id); return; }
+  const P = LY.panel;
+  if (x >= P.x && x <= P.x + P.w && y >= P.y && y <= P.y + P.h) { seq++; msg.page = msg.page < msg.pages.length - 1 ? msg.page + 1 : 0; return; }
+  const h = hitSpot(x, y);
+  if (!h) { if (held) { held = null; seq++; say(""); } return; }
+  if (held) { const it = held; held = null; act({ verb: "item", item: it, spot: h.id }); return; }
+  act({ verb: RU.tapVerb(STORY, st, h), spot: h.id });
+}
+function galleryBtn(id) { seq++; if (id === "close") { overlay = scene === "play" ? "journal" : null; return; } if (id.startsWith("death:")) galleryPick = DEATH_IDS.indexOf(id.slice(6)); }
+function pickItem(it) {
+  if (held && held !== it) { const a = held; held = null; act({ verb: "combine", a, b: it }); return; }
+  if (held === it) { held = null; say(""); return; }
+  held = it; say(STORY.items[it].name + ": " + STORY.items[it].look + " (Tap something to use it on, or another item to combine.)"); sfx("tap");
+}
+function press(id) {
+  if (id === "hint") hint();
+  else if (id === "journal") { overlay = "journal"; journalPage = 0; toast = null; }
+  else if (id === "eye") showSpotsT = 2.6;
+  else if (id === "menu") { save(); scene = "title"; }
+  else if (id === "bag") overlay = "bag";
+  else if (id.startsWith("inv:")) pickItem(id.slice(4));
+}
+addEventListener("keydown", e => {
+  if (["Space", "ArrowUp", "ArrowDown"].includes(e.code)) e.preventDefault();
+  if (scene === "title" && !overlay && (e.code === "Enter" || e.code === "Space")) { seq++; if (SAVE.save) continueGame(); else newGame(); }
+  else if (scene === "dead" && (e.code === "Enter" || e.code === "Space")) rewind();
+  else if (scene === "play" && !overlay) { if (e.code === "KeyH") { hint(); } else if (e.code === "KeyJ") press("journal"); else if (e.code === "Tab") { e.preventDefault(); press("eye"); } }
+  else if (overlay && e.code === "Escape") { overlay = null; coin = null; }
+});
+document.addEventListener("visibilitychange", () => {     // pause game AND music when hidden
+  paused = document.hidden;
+  if (music) { if (paused) music.pause(); else music.play().catch(() => {}); }
+});
+
+// ================= LOOP (fixed 60 updates per second) =================
+function update(dt) {
+  TIME += dt; ticks++;
+  if (fadeT > 0) fadeT = Math.max(0, fadeT - dt);
+  if (mirrorT > 0) mirrorT = Math.max(0, mirrorT - dt);
+  if (flashT > 0) flashT = Math.max(0, flashT - dt);
+  if (showSpotsT > 0) showSpotsT = Math.max(0, showSpotsT - dt);
+  if (toast && toast.t > 0) toast.t -= dt;
+  if (scene === "play" && stats) {
+    stats.t += dt;
+    if (!overlay) {     // idle nudge: after ~10 s of nothing, one spot that still has something to give glints
+      idleT += dt;
+      if (idleT > 10 && !nudge) { const q = RU.hotspots(STORY, st).filter(h => !RU.isQuiet(STORY, st, h)); if (q.length) nudge = q[Math.floor(TIME) % q.length].id; }
+      if (idleT > 13) { idleT = 6; nudge = null; }
+    }
+  }
+}
+let last = performance.now(), acc = 0;
+function frame(now) {
+  if (cw !== innerWidth || ch !== innerHeight || canvas.width !== Math.round(innerWidth * DPR())) resize();
+  const dtm = now - last; last = now;
+  if (!paused) { acc += Math.min(dtm, 100); let n = 0; while (acc >= 1000 / 60 && n++ < 5) { update(1 / 60); acc -= 1000 / 60; } if (n >= 5) acc = 0; } else acc = 0;
+  if (cw) draw();
+  requestAnimationFrame(frame);
+}
+
+// ================= TEST HOOK (read-only: it only reports, it can't change the game) =================
+window.__gs = () => ({
+  scene, overlay, framed, small, paused, ticks, time: +TIME.toFixed(3), seq, test: TEST_BUILD, switched: SWITCHED,
+  buttons: btns.map(q => ({ id: q.id, x: q.x, y: q.y, w: q.w, h: q.h })),
+  spots: st && scene === "play" ? RU.hotspots(STORY, st).map(h => Object.assign({ id: h.id, quiet: RU.isQuiet(STORY, st, h) }, spotRect(h))) : [],
+  layout: { w: cw, h: ch, scale: +LY.sc.toFixed(3), buffer: [canvas.width, canvas.height], uiBottom, scene: { x: LY.sx, y: LY.sy, w: LY.sw, h: LY.sh }, panel: LY.panel, fs: LY.fs, lines: LY.lines },
+  sound: { on: soundOn, ctx: ac ? ac.state : null, music: music ? { paused: music.paused, muted: music.muted, time: music.currentTime } : null },
+  room: st ? st.room : null, key: st ? RU.key(st, STORY) : null, inv: st ? st.inv.slice() : [], held, journal: st ? st.journal.length : 0, stage: st ? st.stage : 0,
+  msg: msg.text, page: msg.page, pages: msg.pages.length, death: deathId, deathNew, gallery: SAVE.gallery.slice(), stats: stats ? Object.assign({}, stats) : null,
+  end: endInfo, mirror: mirrorT > 0, showSpots: showSpotsT > 0, nudge, dials: lockDials.map(k => STORY.symbols[k]), hasSave: !!SAVE.save, wins: SAVE.wins || 0,
+});
+addEventListener("resize", resize);
+resize();
+draw();
+document.getElementById("loading").classList.add("off");
+window.__ready = true;
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
